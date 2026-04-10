@@ -3,6 +3,10 @@ import os
 import numpy as np
 import pandas as pd
 
+from analyze_whistler_baseline import CONFIG_PATH as BASELINE_CONFIG_PATH
+from analyze_whistler_baseline import SEGMENTS_CSV as BASELINE_SEGMENTS_CSV
+from analyze_whistler_baseline import build_segments as build_baseline_segments
+from analyze_whistler_baseline import load_config as load_baseline_config
 from analyze_whistler_burst import (
     BIN_SECONDS,
     MIN_BACKGROUND_EXCESS,
@@ -21,6 +25,7 @@ BBF_EVENTS_CSV = os.path.join(BASE_DIR, "bbf_events.csv")
 WHISTLER_EVENTS_CSV = os.path.join(BASE_DIR, "whistler_events.csv")
 COUPLING_CSV = os.path.join(BASE_DIR, "event_coupling.csv")
 THRESHOLD_SWEEP_CSV = os.path.join(BASE_DIR, "threshold_sweep.csv")
+MODEL_FEATURES_CSV = os.path.join(BASE_DIR, "whistler_model_features.csv")
 
 WHISTLER_EVENT_GAP_SECONDS = 1.0
 LEADING_MIN_SECONDS = -30.0
@@ -36,6 +41,126 @@ WHISTLER_SEGMENT_RATIO_Q = 0.75
 WHISTLER_MIN_DURATION_SECONDS = 0.25
 WHISTLER_MIN_BAND_OCCUPANCY = 0.60
 WHISTLER_MAX_PEAK_FREQ_CV = 0.35
+
+
+def load_or_build_baseline_segments() -> pd.DataFrame:
+    if os.path.exists(BASELINE_SEGMENTS_CSV):
+        return pd.read_csv(BASELINE_SEGMENTS_CSV, parse_dates=["time"])
+    if os.path.exists(BASELINE_CONFIG_PATH):
+        cfg = load_baseline_config()
+        return build_baseline_segments(cfg)
+    raise FileNotFoundError(f"Baseline config not found: {BASELINE_CONFIG_PATH}")
+
+
+def build_model_feature_table(raw_wh: pd.DataFrame, bbf: pd.DataFrame) -> pd.DataFrame:
+    baseline_segments = load_or_build_baseline_segments().copy()
+    baseline_segments["time"] = pd.to_datetime(baseline_segments["time"])
+    baseline_segments = baseline_segments.sort_values("time")
+
+    wh = raw_wh.reset_index().rename(columns={"index": "time"}).sort_values("time")
+    wh["time"] = pd.to_datetime(wh["time"])
+
+    tol = pd.Timedelta(seconds=0.2)
+    feature_table = pd.merge_asof(
+        wh,
+        baseline_segments[
+            [
+                "time",
+                "burst_file",
+                "fce_hz",
+                "peak_freq_hz",
+                "freq_fraction_of_fce",
+                "ellipticity",
+                "planarity",
+                "psd_nt2_per_hz",
+                "baseline_pass",
+            ]
+        ].rename(
+            columns={
+                "fce_hz": "strict_fce_hz",
+                "peak_freq_hz": "strict_peak_freq_hz",
+                "freq_fraction_of_fce": "strict_freq_fraction_of_fce",
+                "psd_nt2_per_hz": "strict_psd_nt2_per_hz",
+                "baseline_pass": "strict_whistler_segment_label",
+            }
+        ),
+        on="time",
+        by="burst_file",
+        direction="nearest",
+        tolerance=tol,
+    )
+
+    bbf_for_join = (
+        bbf[["Vx", "Bz", "bbf_operational_flag", "bbf_direction"]]
+        .copy()
+        .reset_index()
+        .sort_values("time")
+        .rename(columns={"bbf_operational_flag": "bbf_event_label"})
+    )
+    feature_table = pd.merge_asof(
+        feature_table,
+        bbf_for_join,
+        on="time",
+        direction="nearest",
+        tolerance=pd.Timedelta(seconds=BIN_SECONDS / 2),
+    )
+    feature_table["strict_whistler_segment_label"] = feature_table["strict_whistler_segment_label"].fillna(False).astype(bool)
+    feature_table["bbf_event_label"] = feature_table["bbf_event_label"].fillna(False).astype(bool)
+    feature_table["strict_whistler_event_label"] = False
+
+    strict_mask = feature_table["strict_whistler_segment_label"]
+    if strict_mask.any():
+        group = (feature_table.loc[strict_mask, "time"].diff() > pd.Timedelta(seconds=WHISTLER_EVENT_GAP_SECONDS)).cumsum()
+        for _, event in feature_table.loc[strict_mask].groupby(group):
+            start = event["time"].min()
+            end = event["time"].max() + pd.Timedelta(seconds=0.125)
+            in_event = (feature_table["time"] >= start) & (feature_table["time"] <= end)
+            feature_table.loc[in_event, "strict_whistler_event_label"] = True
+
+    feature_table["strict_whistler_segment_label"] = feature_table["strict_whistler_segment_label"].astype(int)
+    feature_table["strict_whistler_event_label"] = feature_table["strict_whistler_event_label"].astype(int)
+    feature_table["bbf_event_label"] = feature_table["bbf_event_label"].astype(int)
+    feature_table["whistler_feature_valid"] = (
+        feature_table["fce_valid"]
+        & feature_table["whistler_ratio"].notna()
+        & feature_table["background_excess"].notna()
+        & feature_table["whistler_power_z"].notna()
+        & feature_table["whistler_ratio_z"].notna()
+        & feature_table["background_excess_z"].notna()
+    ).astype(int)
+    feature_table = feature_table[
+        [
+            "time",
+            "burst_file",
+            "fce_hz",
+            "whistler_band_low_hz",
+            "whistler_band_high_hz",
+            "whistler_peak_freq_hz",
+            "whistler_band_power",
+            "wave_total_power_10_4000hz",
+            "whistler_ratio",
+            "background_excess",
+            "whistler_power_z",
+            "whistler_ratio_z",
+            "background_excess_z",
+            "whistler_activity_score",
+            "whistler_score",
+            "fce_valid",
+            "whistler_feature_valid",
+            "strict_whistler_segment_label",
+            "strict_whistler_event_label",
+            "strict_freq_fraction_of_fce",
+            "ellipticity",
+            "planarity",
+            "strict_psd_nt2_per_hz",
+            "Vx",
+            "Bz",
+            "bbf_event_label",
+            "bbf_direction",
+        ]
+    ]
+    feature_table.to_csv(MODEL_FEATURES_CSV, index=False)
+    return feature_table
 
 
 def build_runs(mask: pd.Series) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
@@ -448,6 +573,7 @@ def main() -> None:
     raw_bbf = build_bbf_table()
     bbf_events, bbf = build_bbf_events(raw_bbf)
     raw_wh = build_whistler_table()
+    model_features = build_model_feature_table(raw_wh, bbf)
     whistler_events, wh, wh_thresholds = build_whistler_events(raw_wh)
     sweep_rows = []
     for floor in [2.0, 2.5, 3.0, 3.5, 4.0]:
@@ -465,6 +591,7 @@ def main() -> None:
         f"- BBF magnetic support is evaluated at event level: `max |delta Bz| > {BZ_VAR_THRESHOLD:.0f} nT` somewhere inside the speed-defined event.",
         f"- Whistler seed segment rule: `whistler_score >= q{int(WHISTLER_SEGMENT_SCORE_Q*100)}` (`{wh_thresholds['score_threshold']:.3f}`), `fce >= {MIN_FCE_HZ:.0f} Hz`, and `background_excess >= max(q{int(WHISTLER_SEGMENT_SCORE_Q*100)}, {MIN_BACKGROUND_EXCESS:.1f})` (`{wh_thresholds['background_threshold']:.3f}`).",
         f"- Whistler event filters: minimum duration `{WHISTLER_MIN_DURATION_SECONDS:.2f}s`, band occupancy `>= {WHISTLER_MIN_BAND_OCCUPANCY:.2f}`, peak-frequency CV `<= {WHISTLER_MAX_PEAK_FREQ_CV:.2f}`, merge gaps up to `{WHISTLER_EVENT_GAP_SECONDS:.1f}s`.",
+        "- Model features are exported separately: continuous features are preserved without thresholding, and strict Santolik-style labels are attached as boolean targets.",
         f"- Leading: `{LEADING_MIN_SECONDS:.0f}s` to `{LEADING_MAX_SECONDS:.0f}s` before BBF start.",
         f"- Coincident: within `+/-{COINCIDENT_WINDOW_SECONDS:.0f}s` of BBF start.",
         f"- Lagging: `+{LAGGING_MIN_SECONDS:.0f}s` to `+{LAGGING_MAX_SECONDS:.0f}s` after BBF start.",
@@ -473,6 +600,9 @@ def main() -> None:
         "## Event Counts",
         f"- Total earthward BBF events: `{len(bbf_events)}`",
         f"- Total whistler events: `{len(whistler_events)}`",
+        f"- Model-feature rows: `{len(model_features)}`",
+        f"- Strict whistler segment labels: `{int(model_features['strict_whistler_segment_label'].sum())}`",
+        f"- Strict whistler event labels: `{int(model_features['strict_whistler_event_label'].sum())}`",
         f"- Tailward fast-flow runs excluded from BBF set: `{tailward_run_count}`",
         f"- Tailward events surviving BBF filter: `{direction_counts.get('tailward_fastflow_candidate', 0)}`",
         f"- Earthward BBF events: `{direction_counts.get('earthward_candidate', 0)}`",
@@ -503,6 +633,7 @@ def main() -> None:
                 f"BBF events CSV: `{BBF_EVENTS_CSV}`",
                 f"Whistler events CSV: `{WHISTLER_EVENTS_CSV}`",
                 f"Coupling CSV: `{COUPLING_CSV}`",
+                f"Model features CSV: `{MODEL_FEATURES_CSV}`",
             ]
         )
         with open(REPORT_PATH, "w", encoding="utf-8") as fh:
@@ -597,9 +728,14 @@ def main() -> None:
             "## Threshold Sweep",
             f"- Background-excess sweep CSV: `{THRESHOLD_SWEEP_CSV}`",
             "",
+            "## Model-Ready Features",
+            "- Continuous predictors are kept as raw/continuous features: `whistler_ratio`, `background_excess`, `whistler_power_z`, `whistler_ratio_z`, `background_excess_z`, and `whistler_activity_score`.",
+            "- Strict labels are attached separately using the Santolik-style rule: `strict_whistler_segment_label` and `strict_whistler_event_label`.",
+            "",
             f"BBF events CSV: `{BBF_EVENTS_CSV}`",
             f"Whistler events CSV: `{WHISTLER_EVENTS_CSV}`",
             f"Coupling CSV: `{COUPLING_CSV}`",
+            f"Model features CSV: `{MODEL_FEATURES_CSV}`",
         ]
     )
 
@@ -610,6 +746,7 @@ def main() -> None:
     print(f"bbf events: {BBF_EVENTS_CSV}")
     print(f"whistler events: {WHISTLER_EVENTS_CSV}")
     print(f"coupling: {COUPLING_CSV}")
+    print(f"model features: {MODEL_FEATURES_CSV}")
 
 
 if __name__ == "__main__":

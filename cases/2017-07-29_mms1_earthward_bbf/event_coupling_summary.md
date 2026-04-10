@@ -6,6 +6,7 @@
 - BBF magnetic support is evaluated at event level: `max |delta Bz| > 3 nT` somewhere inside the speed-defined event.
 - Whistler seed segment rule: `whistler_score >= q75` (`1.928`), `fce >= 50 Hz`, and `background_excess >= max(q75, 3.0)` (`1.502`).
 - Whistler event filters: minimum duration `0.25s`, band occupancy `>= 0.60`, peak-frequency CV `<= 0.35`, merge gaps up to `1.0s`.
+- Model features are exported separately: continuous features are preserved without thresholding, and strict Santolik-style labels are attached as boolean targets.
 - Leading: `-30s` to `-5s` before BBF start.
 - Coincident: within `+/-5s` of BBF start.
 - Lagging: `+5s` to `+60s` after BBF start.
@@ -14,6 +15,9 @@
 ## Event Counts
 - Total earthward BBF events: `4`
 - Total whistler events: `32`
+- Model-feature rows: `4264`
+- Strict whistler segment labels: `247`
+- Strict whistler event labels: `454`
 - Tailward fast-flow runs excluded from BBF set: `0`
 - Tailward events surviving BBF filter: `0`
 - Earthward BBF events: `4`
@@ -65,6 +69,11 @@
 ## Threshold Sweep
 - Background-excess sweep CSV: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\threshold_sweep.csv`
 
+## Model-Ready Features
+- Continuous predictors are kept as raw/continuous features: `whistler_ratio`, `background_excess`, `whistler_power_z`, `whistler_ratio_z`, `background_excess_z`, and `whistler_activity_score`.
+- Strict labels are attached separately using the Santolik-style rule: `strict_whistler_segment_label` and `strict_whistler_event_label`.
+
 BBF events CSV: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\bbf_events.csv`
 Whistler events CSV: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\whistler_events.csv`
 Coupling CSV: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\event_coupling.csv`
+Model features CSV: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\whistler_model_features.csv`

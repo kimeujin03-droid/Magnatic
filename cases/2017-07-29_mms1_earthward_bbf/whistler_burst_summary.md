@@ -31,4 +31,4 @@
 - `bbf_operational_flag` remains the provisional BBF rule from the previous step.
 
 Candidate table: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\whistler_burst_candidates.csv`
-Overview plot: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\whistler_burst_overview.svg`
+Overview plot: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\whistler_burst_overview.png`

@@ -34,3 +34,4 @@
 
 Segments CSV: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\baseline_santolik\baseline_segments.csv`
 Events CSV: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\baseline_santolik\baseline_events.csv`
+Overview plot: `C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf\baseline_santolik\baseline_overview.png`

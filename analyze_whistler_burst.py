@@ -2,6 +2,8 @@ import glob
 import os
 
 import cdflib
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 
@@ -15,7 +17,7 @@ SCM_BURST_FILES = sorted(glob.glob(os.path.join(DATA_DIR, "mms1_scm_brst_l2_schb
 
 REPORT_PATH = os.path.join(BASE_DIR, "whistler_burst_summary.md")
 CSV_PATH = os.path.join(BASE_DIR, "whistler_burst_candidates.csv")
-SVG_PATH = os.path.join(BASE_DIR, "whistler_burst_overview.svg")
+PLOT_PATH = os.path.join(BASE_DIR, "whistler_burst_overview.png")
 
 BIN_SECONDS = 5
 VX_THRESHOLD = 300.0
@@ -197,11 +199,15 @@ def build_whistler_table() -> pd.DataFrame:
     wh["whistler_power_z"] = np.nan
     wh["whistler_ratio_z"] = np.nan
     wh["background_excess_z"] = np.nan
+    wh["whistler_activity_score"] = np.nan
     wh["whistler_score"] = np.nan
     if valid.any():
         wh.loc[valid, "whistler_power_z"] = robust_zscore(np.log10(wh.loc[valid, "whistler_band_power"].clip(lower=1.0)))
         wh.loc[valid, "whistler_ratio_z"] = robust_zscore(wh.loc[valid, "whistler_ratio"].clip(lower=0.0))
         wh.loc[valid, "background_excess_z"] = robust_zscore(np.log10(wh.loc[valid, "background_excess"].clip(lower=1.0)))
+        wh.loc[valid, "whistler_activity_score"] = (
+            wh.loc[valid, "whistler_power_z"] + wh.loc[valid, "whistler_ratio_z"] + wh.loc[valid, "background_excess_z"]
+        )
         wh.loc[valid, "whistler_score"] = (
             wh.loc[valid, "whistler_power_z"].clip(lower=0.0)
             + wh.loc[valid, "whistler_ratio_z"].clip(lower=0.0)
@@ -210,46 +216,31 @@ def build_whistler_table() -> pd.DataFrame:
     return wh
 
 
-def scale_points(values: np.ndarray, width: int, height: int, pad_x: int, pad_y: int, top: int) -> str:
-    vmin = float(np.nanmin(values))
-    vmax = float(np.nanmax(values))
-    if vmax == vmin:
-        vmax = vmin + 1.0
-    x = np.linspace(pad_x, width - pad_x, num=len(values))
-    y = top + pad_y + (height - 2 * pad_y) * (1.0 - (values - vmin) / (vmax - vmin))
-    return " ".join(f"{xi:.1f},{yi:.1f}" for xi, yi in zip(x, y))
-
-
-def render_svg(window: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> None:
-    width = 1400
-    panel_h = 140
-    height = 620
-    pad_x = 80
-    pad_y = 22
+def render_plot(window: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp, primary_time: pd.Timestamp) -> None:
+    fig, axes = plt.subplots(4, 1, figsize=(14, 9), sharex=True, constrained_layout=True)
     panels = [
         ("Vx", "Velocity Vx [km/s]", "#0b6e4f"),
         ("Bz", "Magnetic Field Bz [nT]", "#b22222"),
         ("whistler_band_power", "Whistler-Band Power [0.1-0.5 fce]", "#1f4e79"),
         ("whistler_score", "Whistler Score", "#6b4f9d"),
     ]
-    parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        '<rect width="100%" height="100%" fill="white"/>',
-        f'<text x="{pad_x}" y="28" font-size="22" font-family="Arial">Whistler burst overview</text>',
-        f'<text x="{pad_x}" y="50" font-size="14" font-family="Arial">{start} to {end}</text>',
-    ]
-    for idx, (col, title, color) in enumerate(panels):
-        top = 70 + idx * (panel_h + 8)
-        bottom = top + panel_h
-        vals = window[col].to_numpy(dtype=float)
-        parts.append(f'<rect x="{pad_x}" y="{top}" width="{width - 2 * pad_x}" height="{panel_h}" fill="none" stroke="#cccccc"/>')
-        parts.append(f'<text x="{pad_x}" y="{top - 8}" font-size="16" font-family="Arial">{title}</text>')
-        parts.append(f'<polyline fill="none" stroke="{color}" stroke-width="2" points="{scale_points(vals, width, panel_h, pad_x, pad_y, top)}"/>')
-        parts.append(f'<text x="10" y="{top + 16}" font-size="12" font-family="Arial">{np.nanmax(vals):.2f}</text>')
-        parts.append(f'<text x="10" y="{bottom - 6}" font-size="12" font-family="Arial">{np.nanmin(vals):.2f}</text>')
-    parts.append("</svg>")
-    with open(SVG_PATH, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(parts))
+
+    for ax, (col, title, color) in zip(axes, panels):
+        values = window[col].astype(float)
+        ax.plot(window.index, values, color=color, linewidth=1.8)
+        ax.set_ylabel(title)
+        ax.grid(True, alpha=0.25, linewidth=0.6)
+        ax.axvline(primary_time, color="#444444", linestyle="--", linewidth=1.0)
+        if col == "Vx":
+            ax.axhline(VX_THRESHOLD, color="#2f2f2f", linestyle=":", linewidth=1.0)
+        if col == "Bz":
+            ax.axhline(0.0, color="#2f2f2f", linestyle=":", linewidth=1.0)
+
+    axes[0].set_title(f"Whistler burst overview\n{start} to {end}")
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    axes[-1].set_xlabel("UTC")
+    fig.savefig(PLOT_PATH, dpi=180, bbox_inches="tight")
+    plt.close(fig)
 
 
 def main() -> None:
@@ -276,7 +267,12 @@ def main() -> None:
     primary_time = joined["whistler_score"].idxmax()
     window_start = primary_time - pd.Timedelta(seconds=20)
     window_end = primary_time + pd.Timedelta(seconds=40)
-    render_svg(joined.loc[window_start:window_end, ["Vx", "Bz", "whistler_band_power", "whistler_score"]], window_start, window_end)
+    render_plot(
+        joined.loc[window_start:window_end, ["Vx", "Bz", "whistler_band_power", "whistler_score"]],
+        window_start,
+        window_end,
+        primary_time,
+    )
 
     overlap = joined[joined["bbf_operational_flag"]]
     lines = [
@@ -315,7 +311,7 @@ def main() -> None:
             "- `bbf_operational_flag` remains the provisional BBF rule from the previous step.",
             "",
             f"Candidate table: `{CSV_PATH}`",
-            f"Overview plot: `{SVG_PATH}`",
+            f"Overview plot: `{PLOT_PATH}`",
         ]
     )
 
@@ -323,7 +319,7 @@ def main() -> None:
         fh.write("\n".join(lines))
 
     print(f"report: {REPORT_PATH}")
-    print(f"plot: {SVG_PATH}")
+    print(f"plot: {PLOT_PATH}")
     print(f"candidate csv: {CSV_PATH}")
 
 

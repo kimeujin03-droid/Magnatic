@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 
 import cdflib
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -16,6 +18,7 @@ SEGMENTS_CSV = BASELINE_DIR / "baseline_segments.csv"
 EVENTS_CSV = BASELINE_DIR / "baseline_events.csv"
 SUMMARY_PATH = BASELINE_DIR / "baseline_summary.md"
 STATUS_PATH = BASELINE_DIR / "baseline_status.json"
+PLOT_PATH = BASELINE_DIR / "baseline_overview.png"
 
 STFT_N = 4096
 STFT_STEP = 2048
@@ -244,6 +247,51 @@ def build_events(segments: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     return out
 
 
+def render_plot(segments: pd.DataFrame, events: pd.DataFrame, cfg: dict) -> None:
+    fig, axes = plt.subplots(3, 1, figsize=(14, 9), sharex=True, constrained_layout=True)
+
+    if segments.empty:
+        for ax in axes:
+            ax.text(0.5, 0.5, "No baseline segments", ha="center", va="center", transform=ax.transAxes)
+            ax.set_axis_off()
+        fig.savefig(PLOT_PATH, dpi=180, bbox_inches="tight")
+        plt.close(fig)
+        return
+
+    seg_time = pd.to_datetime(segments["time"])
+    pass_mask = segments["baseline_pass"].astype(bool)
+
+    axes[0].scatter(seg_time, segments["peak_freq_hz"], s=18, c=np.where(pass_mask, "#0b6e4f", "#b0b0b0"), alpha=0.85)
+    axes[0].set_ylabel("Peak Freq [Hz]")
+    axes[0].set_title("Baseline Santolik-style overview")
+    axes[0].grid(True, alpha=0.25, linewidth=0.6)
+
+    axes[1].plot(seg_time, segments["ellipticity"], color="#1f4e79", linewidth=1.2, label="Ellipticity")
+    axes[1].plot(seg_time, segments["planarity"], color="#b65f0b", linewidth=1.2, label="Planarity")
+    axes[1].axhline(cfg["quality_gate"]["ellipticity_min"], color="#1f4e79", linestyle=":", linewidth=1.0)
+    axes[1].axhline(cfg["quality_gate"]["planarity_min"], color="#b65f0b", linestyle=":", linewidth=1.0)
+    axes[1].set_ylabel("Quality")
+    axes[1].grid(True, alpha=0.25, linewidth=0.6)
+    axes[1].legend(loc="upper right")
+
+    axes[2].plot(seg_time, segments["psd_nt2_per_hz"], color="#6b4f9d", linewidth=1.2)
+    axes[2].axhline(cfg["quality_gate"]["magnetic_psd_min_nt2_per_hz"], color="#2f2f2f", linestyle=":", linewidth=1.0)
+    axes[2].set_ylabel("PSD [nT^2/Hz]")
+    axes[2].set_xlabel("UTC")
+    axes[2].grid(True, alpha=0.25, linewidth=0.6)
+    axes[2].set_yscale("log")
+
+    for _, row in events.iterrows():
+        start = pd.Timestamp(row["start_time"])
+        end = pd.Timestamp(row["end_time"])
+        for ax in axes:
+            ax.axvspan(start, end, color="#f2d98a", alpha=0.2)
+
+    axes[2].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    fig.savefig(PLOT_PATH, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
 def write_summary(cfg: dict, segments: pd.DataFrame, events: pd.DataFrame) -> None:
     current_events_path = BASE_DIR / "whistler_events.csv"
     current_event_count = 0
@@ -297,6 +345,7 @@ def write_summary(cfg: dict, segments: pd.DataFrame, events: pd.DataFrame) -> No
             "",
             f"Segments CSV: `{SEGMENTS_CSV}`",
             f"Events CSV: `{EVENTS_CSV}`",
+            f"Overview plot: `{PLOT_PATH}`",
         ]
     )
 
@@ -324,12 +373,14 @@ def main() -> None:
     cfg = load_config()
     segments = build_segments(cfg)
     events = build_events(segments, cfg)
+    render_plot(segments, events, cfg)
     write_summary(cfg, segments, events)
     write_status(cfg, segments, events)
     print(f"baseline workspace: {BASELINE_DIR}")
     print(f"segments: {SEGMENTS_CSV}")
     print(f"events: {EVENTS_CSV}")
     print(f"summary: {SUMMARY_PATH}")
+    print(f"plot: {PLOT_PATH}")
 
 
 if __name__ == "__main__":
