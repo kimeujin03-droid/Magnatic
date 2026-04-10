@@ -1,0 +1,35 @@
+{
+  "ready": true,
+  "implemented": true,
+  "detector": "baseline_santolik_style",
+  "config": {
+    "case_name": "2017-07-29_mms1_earthward_bbf",
+    "detector_name": "baseline_santolik_style",
+    "spacecraft": "MMS1",
+    "time_range_utc": {
+      "start": "2017-07-29T15:00:00Z",
+      "stop": "2017-07-29T17:00:00Z"
+    },
+    "frequency_gate": {
+      "low_fraction_of_fce": 0.1,
+      "high_fraction_of_fce": 0.5
+    },
+    "quality_gate": {
+      "ellipticity_min": 0.7,
+      "planarity_min": 0.7,
+      "magnetic_psd_min_nt2_per_hz": 1e-07
+    },
+    "event_merge": {
+      "minimum_duration_s": 0.25,
+      "maximum_gap_s": 1.0
+    },
+    "notes": [
+      "Baseline detector is intentionally stricter and more physical than the current whistler-like detector.",
+      "This config is meant for side-by-side comparison against the current background_excess pipeline."
+    ]
+  },
+  "data_dir": "C:\\Magnetic\\cases\\2017-07-29_mms1_earthward_bbf\\data",
+  "segment_count": 3758,
+  "passing_segment_count": 224,
+  "event_count": 40
+}

@@ -1,0 +1,16 @@
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Notebook and local tooling noise
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+
+# Case raw datasets
+cases/**/data/
+*.cdf
