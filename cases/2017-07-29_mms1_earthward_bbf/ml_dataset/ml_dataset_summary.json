@@ -1,0 +1,8 @@
+{
+  "case_id": "2017-07-29_mms1_earthward_bbf",
+  "tabular_rows": 3338,
+  "sequence_count": 14,
+  "sequence_timesteps": 421,
+  "sequence_features": 28,
+  "tabular_dataset": "tabular_features.csv (parquet unavailable: ImportError)"
+}
