@@ -1,0 +1,44 @@
+{
+  "start": "2017-01-01",
+  "stop": "2018-01-01",
+  "products": [
+    "fgm_srvy",
+    "fpi_fast_dis_moms",
+    "fpi_brst_dis_moms",
+    "fgm_brst",
+    "scm_brst_schb"
+  ],
+  "summary": [
+    {
+      "product": "fgm_srvy",
+      "files": 366,
+      "total_bytes": 25272066605,
+      "total_gib": 23.536
+    },
+    {
+      "product": "fpi_fast_dis_moms",
+      "files": 2135,
+      "total_bytes": 4200540878,
+      "total_gib": 3.912
+    },
+    {
+      "product": "fpi_brst_dis_moms",
+      "files": 9916,
+      "total_bytes": 10636902287,
+      "total_gib": 9.906
+    },
+    {
+      "product": "fgm_brst",
+      "files": 11075,
+      "total_bytes": 12450631866,
+      "total_gib": 11.596
+    },
+    {
+      "product": "scm_brst_schb",
+      "files": 11065,
+      "total_bytes": 112444241237,
+      "total_gib": 104.722
+    }
+  ],
+  "manifest": "C:\\Magnetic\\manifests\\mms1_2017-01-01_to_2018-01-01_manifest.csv"
+}

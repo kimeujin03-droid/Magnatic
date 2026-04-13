@@ -13,4 +13,5 @@ Thumbs.db
 
 # Case raw datasets
 cases/**/data/
+tmp_mms_download/
 *.cdf

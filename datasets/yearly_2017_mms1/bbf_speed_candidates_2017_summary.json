@@ -1,0 +1,10 @@
+{
+  "manifest": "C:\\Magnetic\\manifests\\mms1_2017-01-01_to_2018-01-01_manifest.csv",
+  "days_requested": 7,
+  "events": 181,
+  "earthward_events": 1,
+  "tailward_events": 180,
+  "failures": [],
+  "output": "C:\\Magnetic\\datasets\\yearly_2017_mms1\\bbf_speed_candidates_2017.csv",
+  "raw_policy": "delete after each day"
+}
