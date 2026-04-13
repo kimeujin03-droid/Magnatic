@@ -1,0 +1,12 @@
+{
+  "dataset_dir": "C:\\Magnetic\\cases\\2017-07-29_mms1_earthward_bbf\\early_bbf_dataset",
+  "drop_inside_bbf": true,
+  "samples": 11,
+  "positive_samples": 6,
+  "feature_count": 18,
+  "outputs": [
+    "C:\\Magnetic\\cases\\2017-07-29_mms1_earthward_bbf\\early_bbf_dataset\\reports\\feature_sanity_check_clean.csv",
+    "C:\\Magnetic\\cases\\2017-07-29_mms1_earthward_bbf\\early_bbf_dataset\\reports\\window_aggregate_features_clean.csv",
+    "C:\\Magnetic\\cases\\2017-07-29_mms1_earthward_bbf\\early_bbf_dataset\\reports\\baseline_results_clean.csv"
+  ]
+}

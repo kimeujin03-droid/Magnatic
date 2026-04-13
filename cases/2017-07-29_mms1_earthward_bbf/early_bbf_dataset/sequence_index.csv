@@ -1,0 +1,15 @@
+case_id,anchor_time,path,timesteps,features,target_bbf_within_5min,inside_bbf_at_anchor,history_seconds,horizon_seconds
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:28:03,sequences/early_bbf_000001.npz,901,18,0,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:31:03,sequences/early_bbf_000002.npz,901,18,0,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:34:03,sequences/early_bbf_000003.npz,901,18,0,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:37:03,sequences/early_bbf_000004.npz,901,18,0,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:40:03,sequences/early_bbf_000005.npz,901,18,0,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:42:35,sequences/early_bbf_000006.npz,901,18,1,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:43:03,sequences/early_bbf_000007.npz,901,18,1,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:44:10,sequences/early_bbf_000008.npz,901,18,1,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:46:03,sequences/early_bbf_000009.npz,901,18,1,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:49:03,sequences/early_bbf_000010.npz,901,18,1,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:50:25,sequences/early_bbf_000011.npz,901,18,1,1,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:52:03,sequences/early_bbf_000012.npz,901,18,1,1,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:55:03,sequences/early_bbf_000013.npz,901,18,1,0,900.0,300.0
+2017-07-29_mms1_earthward_bbf,2017-07-29 15:58:03,sequences/early_bbf_000014.npz,901,18,0,1,900.0,300.0

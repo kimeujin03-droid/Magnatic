@@ -1,0 +1,10 @@
+{
+  "case_id": "2017-07-29_mms1_earthward_bbf",
+  "tabular_rows": 3338,
+  "sequence_count": 14,
+  "positive_sequences": 8,
+  "sequence_timesteps": 901,
+  "sequence_features": 18,
+  "output_dir": "C:\\Magnetic\\cases\\2017-07-29_mms1_earthward_bbf\\early_bbf_dataset",
+  "tabular_dataset": "causal_features.parquet"
+}

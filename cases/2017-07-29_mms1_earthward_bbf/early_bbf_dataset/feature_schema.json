@@ -1,0 +1,42 @@
+{
+  "task": "early_bbf_prediction",
+  "input_window": "t-900s to t",
+  "prediction_window": "t to t+300s",
+  "target": "BBF start strictly after t and within the prediction window.",
+  "tabular_dataset": "causal_features.parquet",
+  "sequence_feature_columns": [
+    "relative_time_s",
+    "Bz",
+    "abs_Bz",
+    "dBz_dt",
+    "Bz_delta_60s",
+    "Bz_rolling_std_60s",
+    "Bz_sign_change_rate_60s",
+    "fce_hz",
+    "whistler_band_power",
+    "wave_total_power_10_4000hz",
+    "whistler_ratio",
+    "whistler_activity_score",
+    "wave_power_delta_60s",
+    "wave_power_increase_rate_60s",
+    "wave_power_rolling_mean_60s",
+    "wave_power_rolling_max_60s",
+    "wave_power_rolling_var_60s",
+    "whistler_feature_observed"
+  ],
+  "excluded_from_inputs": [
+    "Vx",
+    "bbf_event_label",
+    "bbf_event_id",
+    "inside_bbf_at_time",
+    "strict_whistler_segment_label",
+    "strict_whistler_event_label",
+    "baseline_pass",
+    "nearest_whistler",
+    "future_whistler_*"
+  ],
+  "notes": [
+    "All rolling/delta features are computed on the resampled grid using current-or-past samples only.",
+    "Wave inputs are continuous activity statistics, not whistler event flags."
+  ]
+}
