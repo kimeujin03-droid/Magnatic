@@ -203,6 +203,8 @@ def save_tabular(tabular: pd.DataFrame, output_dir: Path) -> str:
     csv_path = output_dir / "tabular_features.csv"
     try:
         tabular.to_parquet(parquet_path, index=False)
+        if csv_path.exists():
+            csv_path.unlink()
         return parquet_path.name
     except Exception as exc:
         tabular.to_csv(csv_path, index=False)

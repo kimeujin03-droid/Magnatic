@@ -2,7 +2,7 @@
   "case_id": "2017-07-29_mms1_earthward_bbf",
   "spacecraft": "MMS1",
   "resample_seconds": 1.0,
-  "tabular_dataset": "tabular_features.csv (parquet unavailable: ImportError)",
+  "tabular_dataset": "tabular_features.parquet",
   "tabular_feature_columns": [
     "fce_hz",
     "whistler_band_low_hz",

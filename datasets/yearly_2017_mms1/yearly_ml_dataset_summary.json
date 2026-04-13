@@ -1,0 +1,12 @@
+{
+  "start": "2017-01-01",
+  "stop": "2018-01-01",
+  "case_count": 1,
+  "cases": [
+    "2017-07-29_mms1_earthward_bbf"
+  ],
+  "tabular_rows": 3338,
+  "sequence_count": 14,
+  "output_dir": "C:\\Magnetic\\datasets\\yearly_2017_mms1",
+  "note": "This merges available case-level feature datasets only; it does not download or retain raw CDF files."
+}
