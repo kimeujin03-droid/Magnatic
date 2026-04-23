@@ -17,5 +17,6 @@ tmp_mms_download/
 *.cdf
 
 # Generated local datasets not intended for GitHub
+datasets/*_vperp_*/
 datasets/tha_2017-01-01_60d_vperp_200_20_filled/
 datasets/tha_bbf_scan_2017-01-01_60d_vperp_200_20_filled/
