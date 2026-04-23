@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 
 import cdflib
@@ -9,9 +8,10 @@ import numpy as np
 import pandas as pd
 
 from analyze_whistler_burst import DATA_DIR, FGM_BRST_FILES, FGM_SRVY_FILE, SCM_BURST_FILES, load_epoch
+from path_utils import resolve_case_dir
 
-
-BASE_DIR = Path(os.environ.get("MMS_CASE_DIR", r"C:\Magnetic"))
+DEFAULT_CASE_ID = "2017-07-29_mms1_earthward_bbf"
+BASE_DIR = resolve_case_dir(default_case=DEFAULT_CASE_ID)
 BASELINE_DIR = BASE_DIR / "baseline_santolik"
 CONFIG_PATH = BASELINE_DIR / "baseline_config.json"
 SEGMENTS_CSV = BASELINE_DIR / "baseline_segments.csv"
@@ -32,27 +32,29 @@ def load_config() -> dict:
         return json.load(fh)
 
 
-def load_fgm() -> pd.DataFrame:
-    frames = []
-    for path in FGM_BRST_FILES:
-        try:
-            cdf = cdflib.CDF(path)
-            t = load_epoch(cdf)
-            vars = cdf.cdf_info().zVariables
-            b_var = next(v for v in vars if v.startswith("mms1_fgm_b_gse_"))
-            b = np.asarray(cdf.varget(b_var), dtype=np.float64)
-            frames.append(pd.DataFrame({"time": t, "Bt": b[:, 3]}))
-        except Exception:
-            continue
-    if frames:
-        return pd.concat(frames, ignore_index=True).sort_values("time").set_index("time")
-
-    cdf = cdflib.CDF(FGM_SRVY_FILE)
+def _load_fgm_bt_frame(path: str) -> pd.DataFrame:
+    """Load one FGM file and keep only total magnetic field needed for fce."""
+    cdf = cdflib.CDF(path)
     t = load_epoch(cdf)
     vars = cdf.cdf_info().zVariables
     b_var = next(v for v in vars if v.startswith("mms1_fgm_b_gse_"))
     b = np.asarray(cdf.varget(b_var), dtype=np.float64)
-    return pd.DataFrame({"time": t, "Bt": b[:, 3]}).set_index("time")
+    return pd.DataFrame({"time": t, "Bt": b[:, 3]})
+
+
+def load_fgm() -> pd.DataFrame:
+    """Load Bt for Santolik-style baseline calculations."""
+    frames = []
+    for path in FGM_BRST_FILES:
+        try:
+            frames.append(_load_fgm_bt_frame(path))
+        except (OSError, ValueError, KeyError, StopIteration) as exc:
+            print(f"warning: skipped baseline FGM file {Path(path).name}: {exc}")
+            continue
+    if frames:
+        return pd.concat(frames, ignore_index=True).sort_values("time").set_index("time")
+
+    return _load_fgm_bt_frame(FGM_SRVY_FILE).set_index("time")
 
 
 def load_fgm_interpolator() -> tuple[np.ndarray, np.ndarray]:
@@ -61,6 +63,7 @@ def load_fgm_interpolator() -> tuple[np.ndarray, np.ndarray]:
 
 
 def smoothed_spectral_matrix(fft_xyz: np.ndarray, fs: float, window: np.ndarray) -> np.ndarray:
+    """Build a frequency-smoothed spectral matrix for polarization analysis."""
     scale = fs * np.sum(window**2)
     outer = fft_xyz[:, :, None] * np.conjugate(fft_xyz[:, None, :])
     outer = outer / scale
@@ -102,6 +105,7 @@ def ellipticity_from_vector(polarization_vec: np.ndarray, k_hat: np.ndarray) -> 
 
 
 def segment_rows(path: str, fgm_x: np.ndarray, fgm_bt: np.ndarray, cfg: dict) -> list[dict]:
+    """Evaluate one SCM burst file with a Santolik-style polarization screen."""
     cdf = cdflib.CDF(path)
     t = load_epoch(cdf)
     data = np.asarray(cdf.varget("mms1_scm_acb_gse_schb_brst_l2"), dtype=np.float64)
@@ -166,7 +170,7 @@ def segment_rows(path: str, fgm_x: np.ndarray, fgm_bt: np.ndarray, cfg: dict) ->
             )
             row = {
                 "time": center_t,
-                "burst_file": os.path.basename(path),
+                "burst_file": Path(path).name,
                 "fce_hz": fce_hz,
                 "peak_freq_hz": float(freqs[idx]),
                 "freq_fraction_of_fce": float(freqs[idx] / fce_hz) if fce_hz > 0 else np.nan,
@@ -183,6 +187,7 @@ def segment_rows(path: str, fgm_x: np.ndarray, fgm_bt: np.ndarray, cfg: dict) ->
 
 
 def build_segments(cfg: dict) -> pd.DataFrame:
+    """Build one best baseline segment per STFT window across all burst files."""
     fgm_x, fgm_bt = load_fgm_interpolator()
     rows = []
     for path in SCM_BURST_FILES:
@@ -193,6 +198,7 @@ def build_segments(cfg: dict) -> pd.DataFrame:
 
 
 def build_events(segments: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Merge passing baseline segments into whistler-like events."""
     valid = segments[segments["baseline_pass"]].copy()
     if valid.empty:
         out = pd.DataFrame(

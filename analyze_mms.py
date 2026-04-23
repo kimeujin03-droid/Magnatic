@@ -1,21 +1,22 @@
-import os
 from dataclasses import dataclass
 
 import cdflib
 import numpy as np
 import pandas as pd
 
+from path_utils import repo_base_dir
 
-BASE_DIR = r"C:\Magnetic"
-FGM_FILE = os.path.join(BASE_DIR, "mms1_fgm_srvy_l2_20260113_v5.540.0.cdf")
-SCM_FILE = os.path.join(BASE_DIR, "mms1_scm_srvy_l2_scsrvy_20260113_v2.2.0.cdf")
+
+BASE_DIR = repo_base_dir()
+FGM_FILE = BASE_DIR / "mms1_fgm_srvy_l2_20260113_v5.540.0.cdf"
+SCM_FILE = BASE_DIR / "mms1_scm_srvy_l2_scsrvy_20260113_v2.2.0.cdf"
 FPI_FILES = [
-    os.path.join(BASE_DIR, "mms1_fpi_fast_l2_dis-moms_20260113020000_v3.4.0.cdf"),
-    os.path.join(BASE_DIR, "mms1_fpi_fast_l2_dis-moms_20260113040000_v3.4.0.cdf"),
+    BASE_DIR / "mms1_fpi_fast_l2_dis-moms_20260113020000_v3.4.0.cdf",
+    BASE_DIR / "mms1_fpi_fast_l2_dis-moms_20260113040000_v3.4.0.cdf",
 ]
-REPORT_PATH = os.path.join(BASE_DIR, "analysis_summary.md")
-SVG_PATH = os.path.join(BASE_DIR, "candidate_interval.svg")
-CSV_PATH = os.path.join(BASE_DIR, "candidate_table.csv")
+REPORT_PATH = BASE_DIR / "analysis_summary.md"
+SVG_PATH = BASE_DIR / "candidate_interval.svg"
+CSV_PATH = BASE_DIR / "candidate_table.csv"
 
 BIN_SECONDS = 5
 VX_THRESHOLD = 300.0
@@ -110,6 +111,13 @@ def summarize_fpi() -> tuple[DatasetSummary, pd.DataFrame]:
 
 
 def bandpower_from_signal(signal: np.ndarray, sample_rate_hz: float, f_low: float, f_high: float) -> float:
+    """Estimate band-limited wave power from a short SCM segment.
+
+    The Hanning window reduces spectral leakage before the FFT so the power
+    estimate is less contaminated by sharp window edges. In this survey-rate
+    feasibility script the goal is not a calibrated wave-normal analysis, but a
+    stable low/mid/high-band proxy that can be compared across windows.
+    """
     clean = np.nan_to_num(signal, nan=0.0)
     windowed = clean * np.hanning(len(clean))
     spectrum = np.fft.rfft(windowed)
@@ -120,6 +128,11 @@ def bandpower_from_signal(signal: np.ndarray, sample_rate_hz: float, f_low: floa
 
 
 def build_scm_features() -> tuple[DatasetSummary, pd.DataFrame]:
+    """Derive survey-rate wave features that are actually observable in SCM data.
+
+    The survey product only covers roughly 0.5-16 Hz here, so these features are
+    feasibility proxies rather than true whistler-band measurements.
+    """
     cdf = cdflib.CDF(SCM_FILE)
     epoch = load_epoch(cdf)
     w = np.asarray(cdf.varget("mms1_scm_acb_gse_scsrvy_srvy_l2"), dtype=np.float64)
@@ -185,6 +198,11 @@ def classify_vx_direction(vx: float) -> str:
 
 
 def build_joint_table(fpi_df: pd.DataFrame, fgm_df: pd.DataFrame, scm_df: pd.DataFrame) -> pd.DataFrame:
+    """Combine FPI, FGM, and SCM features into a provisional BBF candidate table.
+
+    This table mixes a simple operational BBF rule with wave-power proxies so the
+    report can separate event flagging from later candidate ranking.
+    """
     merged = (
         fpi_df.resample(f"{BIN_SECONDS}s").mean()
         .join(fgm_df[["Bx", "By", "Bz", "Bt"]].resample(f"{BIN_SECONDS}s").mean(), how="inner")
@@ -252,7 +270,7 @@ def render_svg(window: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> 
         parts.append(f'<text x="10" y="{top + 16}" font-size="12" font-family="Arial">{np.nanmax(values):.2f}</text>')
         parts.append(f'<text x="10" y="{bottom - 6}" font-size="12" font-family="Arial">{np.nanmin(values):.2f}</text>')
     parts.append("</svg>")
-    with open(SVG_PATH, "w", encoding="utf-8") as fh:
+    with SVG_PATH.open("w", encoding="utf-8") as fh:
         fh.write("\n".join(parts))
 
 
@@ -342,7 +360,7 @@ def write_report(summaries: list[DatasetSummary], merged: pd.DataFrame) -> None:
         ]
     )
 
-    with open(REPORT_PATH, "w", encoding="utf-8") as fh:
+    with REPORT_PATH.open("w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
 
 

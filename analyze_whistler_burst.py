@@ -1,5 +1,6 @@
 import glob
 import os
+from pathlib import Path
 
 import cdflib
 import matplotlib.pyplot as plt
@@ -7,17 +8,19 @@ import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 
+from path_utils import resolve_case_dir
 
-BASE_DIR = os.environ.get("MMS_CASE_DIR", r"C:\Magnetic")
-DATA_DIR = os.path.join(BASE_DIR, "data") if os.path.isdir(os.path.join(BASE_DIR, "data")) else BASE_DIR
-FGM_SRVY_FILE = sorted(glob.glob(os.path.join(DATA_DIR, "mms1_fgm_srvy_l2_*.cdf")))[0]
-FGM_BRST_FILES = sorted(glob.glob(os.path.join(DATA_DIR, "mms1_fgm_brst_l2_*.cdf")))
-FPI_FILES = sorted(glob.glob(os.path.join(DATA_DIR, "mms1_fpi_brst_l2_dis-moms_*.cdf")))
-SCM_BURST_FILES = sorted(glob.glob(os.path.join(DATA_DIR, "mms1_scm_brst_l2_schb_*.cdf")))
+DEFAULT_CASE_ID = "2017-07-29_mms1_earthward_bbf"
+BASE_DIR = resolve_case_dir(default_case=DEFAULT_CASE_ID)
+DATA_DIR = BASE_DIR / "data" if (BASE_DIR / "data").is_dir() else BASE_DIR
+FGM_SRVY_FILE = sorted(glob.glob(str(DATA_DIR / "mms1_fgm_srvy_l2_*.cdf")))[0]
+FGM_BRST_FILES = sorted(glob.glob(str(DATA_DIR / "mms1_fgm_brst_l2_*.cdf")))
+FPI_FILES = sorted(glob.glob(str(DATA_DIR / "mms1_fpi_brst_l2_dis-moms_*.cdf")))
+SCM_BURST_FILES = sorted(glob.glob(str(DATA_DIR / "mms1_scm_brst_l2_schb_*.cdf")))
 
-REPORT_PATH = os.path.join(BASE_DIR, "whistler_burst_summary.md")
-CSV_PATH = os.path.join(BASE_DIR, "whistler_burst_candidates.csv")
-PLOT_PATH = os.path.join(BASE_DIR, "whistler_burst_overview.png")
+REPORT_PATH = BASE_DIR / "whistler_burst_summary.md"
+CSV_PATH = BASE_DIR / "whistler_burst_candidates.csv"
+PLOT_PATH = BASE_DIR / "whistler_burst_overview.png"
 
 BIN_SECONDS = 5
 VX_THRESHOLD = 300.0
@@ -61,6 +64,7 @@ def classify_vx_direction(vx: float) -> str:
 
 
 def load_fpi() -> pd.DataFrame:
+    """Load burst ion bulk velocity used for the operational BBF proxy."""
     frames = []
     for path in FPI_FILES:
         cdf = cdflib.CDF(path)
@@ -72,30 +76,38 @@ def load_fpi() -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True).sort_values("time").set_index("time")
 
 
-def load_fgm() -> pd.DataFrame:
-    frames = []
-    for path in FGM_BRST_FILES:
-        try:
-            cdf = cdflib.CDF(path)
-            t = load_epoch(cdf)
-            vars = cdf.cdf_info().zVariables
-            b_var = next(v for v in vars if v.startswith("mms1_fgm_b_gse_"))
-            b = np.asarray(cdf.varget(b_var), dtype=np.float64)
-            frames.append(pd.DataFrame({"time": t, "Bx": b[:, 0], "By": b[:, 1], "Bz": b[:, 2], "Bt": b[:, 3]}))
-        except Exception:
-            continue
-    if frames:
-        return pd.concat(frames, ignore_index=True).sort_values("time").set_index("time")
-
-    cdf = cdflib.CDF(FGM_SRVY_FILE)
+def _load_fgm_frame(path: str) -> pd.DataFrame:
+    """Load one FGM file into a standard burst/survey field table."""
+    cdf = cdflib.CDF(path)
     t = load_epoch(cdf)
     vars = cdf.cdf_info().zVariables
     b_var = next(v for v in vars if v.startswith("mms1_fgm_b_gse_"))
     b = np.asarray(cdf.varget(b_var), dtype=np.float64)
-    return pd.DataFrame({"time": t, "Bx": b[:, 0], "By": b[:, 1], "Bz": b[:, 2], "Bt": b[:, 3]}).set_index("time")
+    return pd.DataFrame({"time": t, "Bx": b[:, 0], "By": b[:, 1], "Bz": b[:, 2], "Bt": b[:, 3]})
+
+
+def load_fgm() -> pd.DataFrame:
+    """Prefer burst FGM for local timing and fall back to survey FGM if needed."""
+    frames = []
+    for path in FGM_BRST_FILES:
+        try:
+            frames.append(_load_fgm_frame(path))
+        except (OSError, ValueError, KeyError, StopIteration) as exc:
+            print(f"warning: skipped FGM file {Path(path).name}: {exc}")
+            continue
+    if frames:
+        return pd.concat(frames, ignore_index=True).sort_values("time").set_index("time")
+
+    return _load_fgm_frame(FGM_SRVY_FILE).set_index("time")
 
 
 def build_bbf_table() -> pd.DataFrame:
+    """Build a burst-interval BBF proxy table.
+
+    The rule intentionally separates earthward flow persistence from magnetic
+    support so later scripts can decide whether to keep pure speed runs or only
+    magnetically supported BBF events.
+    """
     fpi = load_fpi().resample(f"{BIN_SECONDS}s").mean()
     fgm = load_fgm()[["Bz", "Bt"]].resample(f"{BIN_SECONDS}s").mean()
     merged = fpi.join(fgm, how="inner")
@@ -127,6 +139,12 @@ def bandpower(spectrum_power: np.ndarray, freqs: np.ndarray, low_hz: float, high
 
 
 def analyze_single_burst(path: str, fgm_x: np.ndarray, fgm_bt: np.ndarray) -> pd.DataFrame:
+    """Extract dynamic whistler-band proxies from one SCM burst file.
+
+    The band is defined as a fraction of local electron cyclotron frequency so the
+    scoring follows the physically relevant band rather than a fixed frequency
+    interval.
+    """
     cdf = cdflib.CDF(path)
     t = load_epoch(cdf)
     data = np.asarray(cdf.varget("mms1_scm_acb_gse_schb_brst_l2"), dtype=np.float64)
@@ -175,7 +193,7 @@ def analyze_single_burst(path: str, fgm_x: np.ndarray, fgm_bt: np.ndarray) -> pd
             "whistler_band_power": whistler_power,
             "wave_total_power_10_4000hz": total_power,
             "whistler_peak_freq_hz": peak_freq,
-            "burst_file": os.path.basename(path),
+            "burst_file": Path(path).name,
         }
     ).set_index("time")
     df["whistler_ratio"] = df["whistler_band_power"] / df["wave_total_power_10_4000hz"]
@@ -315,7 +333,7 @@ def main() -> None:
         ]
     )
 
-    with open(REPORT_PATH, "w", encoding="utf-8") as fh:
+    with REPORT_PATH.open("w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
 
     print(f"report: {REPORT_PATH}")

@@ -1,13 +1,13 @@
 import argparse
 import json
-import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from path_utils import resolve_case_dir
 
-DEFAULT_CASE_DIR = Path(r"C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf")
+DEFAULT_CASE_ID = "2017-07-29_mms1_earthward_bbf"
 
 NUMERIC_FEATURES = [
     "fce_hz",
@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--case-dir",
-        default=os.environ.get("MMS_CASE_DIR", str(DEFAULT_CASE_DIR)),
+        default=str(resolve_case_dir(default_case=DEFAULT_CASE_ID)),
         help="Case directory containing whistler_model_features.csv, bbf_events.csv, and whistler_events.csv.",
     )
     parser.add_argument(
@@ -93,6 +93,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_case_config(case_dir: Path) -> dict:
+    """Load case metadata used to label exported ML artifacts."""
     path = case_dir / "case_config.json"
     if not path.exists():
         return {"case_id": case_dir.name}
@@ -101,6 +102,7 @@ def load_case_config(case_dir: Path) -> dict:
 
 
 def load_inputs(case_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load the event-coupling outputs required for ML dataset generation."""
     feature_path = case_dir / "whistler_model_features.csv"
     bbf_path = case_dir / "bbf_events.csv"
     whistler_path = case_dir / "whistler_events.csv"
@@ -129,6 +131,7 @@ def load_inputs(case_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
 
 
 def coerce_feature_columns(features: pd.DataFrame) -> pd.DataFrame:
+    """Normalize feature dtypes so training exports do not depend on CSV quirks."""
     df = features.copy()
     for col in NUMERIC_FEATURES:
         if col not in df:
@@ -147,6 +150,7 @@ def coerce_feature_columns(features: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_regular_grid(features: pd.DataFrame, resample_seconds: float) -> pd.DataFrame:
+    """Resample irregular feature rows onto a regular timeline for baseline models."""
     feature_cols = NUMERIC_FEATURES + ["abs_Bz", "abs_Vx", "whistler_to_fce"] + BOOLEAN_FEATURES
     label_cols = ["strict_whistler_segment_label", "strict_whistler_event_label"]
 
@@ -271,6 +275,7 @@ def build_sequences(
     regular_anchor_stride_seconds: float,
     include_regular_anchors: bool,
 ) -> pd.DataFrame:
+    """Export fixed windows around BBF anchors for sequence-model experiments."""
     sequence_dir = output_dir / "sequences"
     sequence_dir.mkdir(parents=True, exist_ok=True)
     for old_sequence in sequence_dir.glob("seq_*.npz"):

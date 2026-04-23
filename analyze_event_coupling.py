@@ -17,15 +17,16 @@ from analyze_whistler_burst import (
     build_bbf_table,
     build_whistler_table,
 )
+from path_utils import resolve_case_dir
 
-
-BASE_DIR = os.environ.get("MMS_CASE_DIR", r"C:\Magnetic")
-REPORT_PATH = os.path.join(BASE_DIR, "event_coupling_summary.md")
-BBF_EVENTS_CSV = os.path.join(BASE_DIR, "bbf_events.csv")
-WHISTLER_EVENTS_CSV = os.path.join(BASE_DIR, "whistler_events.csv")
-COUPLING_CSV = os.path.join(BASE_DIR, "event_coupling.csv")
-THRESHOLD_SWEEP_CSV = os.path.join(BASE_DIR, "threshold_sweep.csv")
-MODEL_FEATURES_CSV = os.path.join(BASE_DIR, "whistler_model_features.csv")
+DEFAULT_CASE_ID = "2017-07-29_mms1_earthward_bbf"
+BASE_DIR = resolve_case_dir(default_case=DEFAULT_CASE_ID)
+REPORT_PATH = BASE_DIR / "event_coupling_summary.md"
+BBF_EVENTS_CSV = BASE_DIR / "bbf_events.csv"
+WHISTLER_EVENTS_CSV = BASE_DIR / "whistler_events.csv"
+COUPLING_CSV = BASE_DIR / "event_coupling.csv"
+THRESHOLD_SWEEP_CSV = BASE_DIR / "threshold_sweep.csv"
+MODEL_FEATURES_CSV = BASE_DIR / "whistler_model_features.csv"
 
 WHISTLER_EVENT_GAP_SECONDS = 1.0
 LEADING_MIN_SECONDS = -30.0
@@ -44,6 +45,7 @@ WHISTLER_MAX_PEAK_FREQ_CV = 0.35
 
 
 def load_or_build_baseline_segments() -> pd.DataFrame:
+    """Load baseline labels or regenerate them from the baseline config."""
     if os.path.exists(BASELINE_SEGMENTS_CSV):
         return pd.read_csv(BASELINE_SEGMENTS_CSV, parse_dates=["time"])
     if os.path.exists(BASELINE_CONFIG_PATH):
@@ -53,6 +55,7 @@ def load_or_build_baseline_segments() -> pd.DataFrame:
 
 
 def build_model_feature_table(raw_wh: pd.DataFrame, bbf: pd.DataFrame) -> pd.DataFrame:
+    """Merge raw whistler features with strict baseline labels and BBF context."""
     baseline_segments = load_or_build_baseline_segments().copy()
     baseline_segments["time"] = pd.to_datetime(baseline_segments["time"])
     baseline_segments = baseline_segments.sort_values("time")
@@ -194,90 +197,107 @@ def classify_lag(lag_onset_seconds: float) -> str:
     return "uncorrelated"
 
 
+def empty_bbf_events_frame() -> pd.DataFrame:
+    """Return the canonical empty BBF-event table."""
+    return pd.DataFrame(
+        columns=[
+            "bbf_event_id",
+            "start_time",
+            "end_time",
+            "duration_s",
+            "peak_time",
+            "peak_abs_vx",
+            "peak_vx",
+            "mean_bz",
+            "max_bz_delta",
+            "max_bz_delta_time",
+            "front_time",
+            "front_dbz",
+            "flow_accel_onset_time",
+            "magnetic_support",
+            "direction",
+            "num_bins",
+            "bbf_operational_event",
+        ]
+    )
+
+
+def summarize_bbf_run(idx: int, event: pd.DataFrame) -> dict:
+    """Convert one speed-defined run into an event-level BBF summary."""
+    start = event.index.min()
+    end = event.index.max()
+    event_max_bz_delta = float(event["bz_delta"].fillna(0.0).max())
+    magnetic_support = event_max_bz_delta > BZ_VAR_THRESHOLD
+    peak_time = event["abs_vx"].idxmax()
+    max_bz_delta_time = event["bz_delta"].fillna(0.0).idxmax()
+    positive_dbz = event["dBz"].clip(lower=0.0).fillna(0.0)
+    front_time = positive_dbz.idxmax()
+    accel_onset_mask = event["dVx"].fillna(0.0) > 0.0
+    flow_accel_onset_time = accel_onset_mask[accel_onset_mask].index.min() if accel_onset_mask.any() else start
+    direction_values = event["bbf_direction"].replace("none", pd.NA).dropna()
+    return {
+        "bbf_event_id": idx,
+        "start_time": start,
+        "end_time": end + pd.Timedelta(seconds=BIN_SECONDS),
+        "duration_s": (end - start).total_seconds() + BIN_SECONDS,
+        "peak_time": peak_time,
+        "peak_abs_vx": float(event.loc[peak_time, "abs_vx"]),
+        "peak_vx": float(event.loc[peak_time, "Vx"]),
+        "mean_bz": float(event["Bz"].mean()),
+        "max_bz_delta": event_max_bz_delta,
+        "max_bz_delta_time": max_bz_delta_time,
+        "front_time": front_time,
+        "front_dbz": float(positive_dbz.max()),
+        "flow_accel_onset_time": flow_accel_onset_time,
+        "magnetic_support": magnetic_support,
+        "direction": direction_values.mode().iloc[0] if not direction_values.empty else "none",
+        "num_bins": int(len(event)),
+    }
+
+
+def reindex_operational_events(events: pd.DataFrame, bbf: pd.DataFrame, event_ids: pd.Series) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Keep only magnetically supported BBF events and remap event ids."""
+    filtered = events[events["magnetic_support"]].copy().reset_index(drop=True)
+    bbf = bbf.copy()
+    bbf["bbf_event_id"] = event_ids
+    bbf["bbf_operational_flag"] = bbf["bbf_event_id"].notna()
+    if filtered.empty:
+        return filtered, bbf
+    filtered["bbf_event_id"] = np.arange(1, len(filtered) + 1)
+    id_map = dict(zip(events.loc[events["magnetic_support"], "bbf_event_id"], filtered["bbf_event_id"]))
+    bbf["bbf_event_id"] = bbf["bbf_event_id"].map(id_map)
+    return filtered, bbf
+
+
 def build_bbf_events(bbf: pd.DataFrame, output_csv: str | None = BBF_EVENTS_CSV) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Aggregate speed-defined BBF bins into event-level summaries."""
     runs = build_runs(bbf["bbf_speed_run_flag"])
     rows = []
     event_ids = pd.Series(np.nan, index=bbf.index, dtype="float64")
-    event_flag = pd.Series(False, index=bbf.index)
     for idx, (start, end) in enumerate(runs, start=1):
         event = bbf.loc[start:end].copy()
-        event_max_bz_delta = float(event["bz_delta"].fillna(0.0).max())
-        magnetic_support = event_max_bz_delta > BZ_VAR_THRESHOLD
-        peak_time = event["abs_vx"].idxmax()
-        max_bz_delta_time = event["bz_delta"].fillna(0.0).idxmax()
-        positive_dbz = event["dBz"].clip(lower=0.0).fillna(0.0)
-        front_time = positive_dbz.idxmax()
-        accel_onset_mask = event["dVx"].fillna(0.0) > 0.0
-        flow_accel_onset_time = accel_onset_mask[accel_onset_mask].index.min() if accel_onset_mask.any() else start
-        direction_values = event["bbf_direction"].replace("none", pd.NA).dropna()
-        rows.append(
-            {
-                "bbf_event_id": idx,
-                "start_time": start,
-                "end_time": end + pd.Timedelta(seconds=BIN_SECONDS),
-                "duration_s": (end - start).total_seconds() + BIN_SECONDS,
-                "peak_time": peak_time,
-                "peak_abs_vx": float(event.loc[peak_time, "abs_vx"]),
-                "peak_vx": float(event.loc[peak_time, "Vx"]),
-                "mean_bz": float(event["Bz"].mean()),
-                "max_bz_delta": event_max_bz_delta,
-                "max_bz_delta_time": max_bz_delta_time,
-                "front_time": front_time,
-                "front_dbz": float(positive_dbz.max()),
-                "flow_accel_onset_time": flow_accel_onset_time,
-                "magnetic_support": magnetic_support,
-                "direction": direction_values.mode().iloc[0] if not direction_values.empty else "none",
-                "num_bins": int(len(event)),
-            }
-        )
-        if magnetic_support:
+        summary = summarize_bbf_run(idx, event)
+        rows.append(summary)
+        if summary["magnetic_support"]:
             event_ids.loc[start:end] = idx
-            event_flag.loc[start:end] = True
     events = pd.DataFrame(rows)
     if events.empty:
-        empty = pd.DataFrame(
-            columns=[
-                "bbf_event_id",
-                "start_time",
-                "end_time",
-                "duration_s",
-                "peak_time",
-                "peak_abs_vx",
-                "peak_vx",
-                "mean_bz",
-                "max_bz_delta",
-                "max_bz_delta_time",
-                "front_time",
-                "front_dbz",
-                "flow_accel_onset_time",
-                "magnetic_support",
-                "direction",
-                "num_bins",
-                "bbf_operational_event",
-            ]
-        )
+        empty = empty_bbf_events_frame()
         bbf = bbf.copy()
         bbf["bbf_event_id"] = event_ids
-        bbf["bbf_operational_flag"] = event_flag
+        bbf["bbf_operational_flag"] = False
         if output_csv is not None:
             empty.to_csv(output_csv, index=False)
         return empty, bbf
-    if not events.empty:
-        events["bbf_operational_event"] = events["magnetic_support"]
-    bbf = bbf.copy()
-    bbf["bbf_event_id"] = event_ids
-    bbf["bbf_operational_flag"] = event_flag
-    filtered = events[events["magnetic_support"]].copy().reset_index(drop=True)
-    if not filtered.empty:
-        filtered["bbf_event_id"] = np.arange(1, len(filtered) + 1)
-        id_map = dict(zip(events.loc[events["magnetic_support"], "bbf_event_id"], filtered["bbf_event_id"]))
-        bbf["bbf_event_id"] = bbf["bbf_event_id"].map(id_map)
+    events["bbf_operational_event"] = events["magnetic_support"]
+    filtered, bbf = reindex_operational_events(events, bbf, event_ids)
     if output_csv is not None:
         filtered.to_csv(output_csv, index=False)
     return filtered, bbf
 
 
 def build_whistler_events(wh: pd.DataFrame, min_background_excess: float = MIN_BACKGROUND_EXCESS) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """Merge segment candidates into event-level whistler detections."""
     score_threshold = float(wh["whistler_score"].quantile(WHISTLER_SEGMENT_SCORE_Q))
     ratio_threshold = float(wh["whistler_ratio"].quantile(WHISTLER_SEGMENT_RATIO_Q))
     background_threshold = float(wh["background_excess"].quantile(WHISTLER_SEGMENT_SCORE_Q))
@@ -378,6 +398,7 @@ def build_whistler_events(wh: pd.DataFrame, min_background_excess: float = MIN_B
 
 
 def nearest_whistler_lag(bbf_events: pd.DataFrame, whistler_events: pd.DataFrame) -> pd.DataFrame:
+    """Attach the nearest whistler event to each BBF event and compute lags."""
     rows = []
     for _, bbf in bbf_events.iterrows():
         bbf_start = pd.Timestamp(bbf["start_time"])
@@ -569,20 +590,13 @@ def summarize_sweep_point(raw_wh: pd.DataFrame, bbf_events: pd.DataFrame, bbf: p
     }
 
 
-def main() -> None:
-    raw_bbf = build_bbf_table()
-    bbf_events, bbf = build_bbf_events(raw_bbf)
-    raw_wh = build_whistler_table()
-    model_features = build_model_feature_table(raw_wh, bbf)
-    whistler_events, wh, wh_thresholds = build_whistler_events(raw_wh)
-    sweep_rows = []
-    for floor in [2.0, 2.5, 3.0, 3.5, 4.0]:
-        sweep_rows.append(summarize_sweep_point(raw_wh, bbf_events, bbf, min_background_excess=floor))
-    pd.DataFrame(sweep_rows).to_csv(THRESHOLD_SWEEP_CSV, index=False)
-    direction_counts = bbf_events["direction"].value_counts().to_dict() if not bbf_events.empty else {}
-    tailward_run_count = len(build_runs(raw_bbf["tailward_speed_run_flag"]))
+def write_report(lines: list[str]) -> None:
+    with REPORT_PATH.open("w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
 
-    lines = [
+
+def build_rules_section(wh_thresholds: dict) -> list[str]:
+    return [
         "# Event Coupling Summary",
         "",
         "## Analysis Rules",
@@ -597,6 +611,13 @@ def main() -> None:
         f"- Lagging: `+{LAGGING_MIN_SECONDS:.0f}s` to `+{LAGGING_MAX_SECONDS:.0f}s` after BBF start.",
         "- Other offsets are `uncorrelated`.",
         "",
+    ]
+
+
+def build_event_counts_section(bbf_events: pd.DataFrame, whistler_events: pd.DataFrame, model_features: pd.DataFrame, raw_bbf: pd.DataFrame) -> list[str]:
+    direction_counts = bbf_events["direction"].value_counts().to_dict() if not bbf_events.empty else {}
+    tailward_run_count = len(build_runs(raw_bbf["tailward_speed_run_flag"]))
+    return [
         "## Event Counts",
         f"- Total earthward BBF events: `{len(bbf_events)}`",
         f"- Total whistler events: `{len(whistler_events)}`",
@@ -609,44 +630,41 @@ def main() -> None:
         "",
     ]
 
-    if bbf_events.empty:
-        pd.DataFrame(
-            columns=[
-                "bbf_event_id",
-                "start_time",
-                "end_time",
-                "direction",
-                "peak_vx",
-                "nearest_whistler_start_time",
-                "lag_onset_seconds",
-                "lag_peak_seconds",
-                "lag_class",
-                "overlap",
-            ]
-        ).to_csv(COUPLING_CSV, index=False)
-        lines.extend(
-            [
-                "## Result",
-                "- No earthward BBF events are present in this burst interval under the current BBF definition.",
-                "- This interval contains tailward fast flow and whistler activity, but it does not provide BBF-whistler coupling evidence.",
-                "",
-                f"BBF events CSV: `{BBF_EVENTS_CSV}`",
-                f"Whistler events CSV: `{WHISTLER_EVENTS_CSV}`",
-                f"Coupling CSV: `{COUPLING_CSV}`",
-                f"Model features CSV: `{MODEL_FEATURES_CSV}`",
-            ]
-        )
-        with open(REPORT_PATH, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lines))
-        print(f"report: {REPORT_PATH}")
-        print(f"bbf events: {BBF_EVENTS_CSV}")
-        print(f"whistler events: {WHISTLER_EVENTS_CSV}")
-        print(f"coupling: {COUPLING_CSV}")
-        return
 
-    coupling = nearest_whistler_lag(bbf_events, whistler_events)
-    baseline = compute_baseline(bbf, wh, whistler_events)
+def write_empty_coupling_csv() -> None:
+    pd.DataFrame(
+        columns=[
+            "bbf_event_id",
+            "start_time",
+            "end_time",
+            "direction",
+            "peak_vx",
+            "nearest_whistler_start_time",
+            "lag_onset_seconds",
+            "lag_peak_seconds",
+            "lag_class",
+            "overlap",
+        ]
+    ).to_csv(COUPLING_CSV, index=False)
 
+
+def write_no_bbf_report(lines: list[str]) -> None:
+    lines.extend(
+        [
+            "## Result",
+            "- No earthward BBF events are present in this burst interval under the current BBF definition.",
+            "- This interval contains tailward fast flow and whistler activity, but it does not provide BBF-whistler coupling evidence.",
+            "",
+            f"BBF events CSV: `{BBF_EVENTS_CSV}`",
+            f"Whistler events CSV: `{WHISTLER_EVENTS_CSV}`",
+            f"Coupling CSV: `{COUPLING_CSV}`",
+            f"Model features CSV: `{MODEL_FEATURES_CSV}`",
+        ]
+    )
+    write_report(lines)
+
+
+def build_lag_statistics_section(coupling: pd.DataFrame) -> list[str]:
     lag_counts = coupling["lag_class"].value_counts().to_dict() if not coupling.empty else {}
     front_lag_counts = coupling["front_lag_class"].value_counts().to_dict() if not coupling.empty else {}
     mean_lag = coupling["lag_onset_seconds"].mean() if not coupling["lag_onset_seconds"].dropna().empty else np.nan
@@ -655,48 +673,54 @@ def main() -> None:
     median_front_lag = coupling["lag_to_front_seconds"].median() if not coupling["lag_to_front_seconds"].dropna().empty else np.nan
     mean_vx_peak_lag = coupling["lag_to_vx_peak_seconds"].mean() if not coupling["lag_to_vx_peak_seconds"].dropna().empty else np.nan
     mean_bz_peak_lag = coupling["lag_to_bz_peak_seconds"].mean() if not coupling["lag_to_bz_peak_seconds"].dropna().empty else np.nan
+    return [
+        "## Lag Statistics",
+        f"- Mean onset lag: `{mean_lag:.3f}s`" if not np.isnan(mean_lag) else "- Mean onset lag: `NaN`",
+        f"- Median onset lag: `{median_lag:.3f}s`" if not np.isnan(median_lag) else "- Median onset lag: `NaN`",
+        f"- Mean lag relative to BBF front time: `{mean_front_lag:.3f}s`" if not np.isnan(mean_front_lag) else "- Mean lag relative to BBF front time: `NaN`",
+        f"- Median lag relative to BBF front time: `{median_front_lag:.3f}s`" if not np.isnan(median_front_lag) else "- Median lag relative to BBF front time: `NaN`",
+        f"- Mean lag relative to BBF peak Vx: `{mean_vx_peak_lag:.3f}s`" if not np.isnan(mean_vx_peak_lag) else "- Mean lag relative to BBF peak Vx: `NaN`",
+        f"- Mean lag relative to max |dBz| time: `{mean_bz_peak_lag:.3f}s`" if not np.isnan(mean_bz_peak_lag) else "- Mean lag relative to max |dBz| time: `NaN`",
+        f"- Leading: `{lag_counts.get('leading', 0)}`",
+        f"- Coincident: `{lag_counts.get('coincident', 0)}`",
+        f"- Lagging: `{lag_counts.get('lagging', 0)}`",
+        f"- Uncorrelated: `{lag_counts.get('uncorrelated', 0)}`",
+        f"- Front-referenced coincident: `{front_lag_counts.get('coincident', 0)}`",
+        "",
+    ]
+
+
+def build_phase_section(coupling: pd.DataFrame) -> list[str]:
     phase_median = coupling["normalized_event_phase"].median() if not coupling["normalized_event_phase"].dropna().empty else np.nan
     phase_counts = coupling["phase_region"].value_counts().to_dict() if not coupling.empty else {}
+    return [
+        "## Event Phase",
+        f"- Median normalized phase `phi`: `{phase_median:.3f}`" if not np.isnan(phase_median) else "- Median normalized phase `phi`: `NaN`",
+        f"- Pre-event (`phi < 0`): `{phase_counts.get('pre_event', 0)}`",
+        f"- Early (`0 <= phi < 1/3`): `{phase_counts.get('early', 0)}`",
+        f"- Mid (`1/3 <= phi < 2/3`): `{phase_counts.get('mid', 0)}`",
+        f"- Late (`2/3 <= phi <= 1`): `{phase_counts.get('late', 0)}`",
+        f"- Post-event (`phi > 1`): `{phase_counts.get('post_event', 0)}`",
+        "",
+    ]
 
-    lines.extend(
-        [
-            "## Lag Statistics",
-            f"- Mean onset lag: `{mean_lag:.3f}s`" if not np.isnan(mean_lag) else "- Mean onset lag: `NaN`",
-            f"- Median onset lag: `{median_lag:.3f}s`" if not np.isnan(median_lag) else "- Median onset lag: `NaN`",
-            f"- Mean lag relative to BBF front time: `{mean_front_lag:.3f}s`" if not np.isnan(mean_front_lag) else "- Mean lag relative to BBF front time: `NaN`",
-            f"- Median lag relative to BBF front time: `{median_front_lag:.3f}s`" if not np.isnan(median_front_lag) else "- Median lag relative to BBF front time: `NaN`",
-            f"- Mean lag relative to BBF peak Vx: `{mean_vx_peak_lag:.3f}s`" if not np.isnan(mean_vx_peak_lag) else "- Mean lag relative to BBF peak Vx: `NaN`",
-            f"- Mean lag relative to max |dBz| time: `{mean_bz_peak_lag:.3f}s`" if not np.isnan(mean_bz_peak_lag) else "- Mean lag relative to max |dBz| time: `NaN`",
-            f"- Leading: `{lag_counts.get('leading', 0)}`",
-            f"- Coincident: `{lag_counts.get('coincident', 0)}`",
-            f"- Lagging: `{lag_counts.get('lagging', 0)}`",
-            f"- Uncorrelated: `{lag_counts.get('uncorrelated', 0)}`",
-            f"- Front-referenced coincident: `{front_lag_counts.get('coincident', 0)}`",
-            "",
-            "## Event Phase",
-            f"- Median normalized phase `phi`: `{phase_median:.3f}`" if not np.isnan(phase_median) else "- Median normalized phase `phi`: `NaN`",
-            f"- Pre-event (`phi < 0`): `{phase_counts.get('pre_event', 0)}`",
-            f"- Early (`0 <= phi < 1/3`): `{phase_counts.get('early', 0)}`",
-            f"- Mid (`1/3 <= phi < 2/3`): `{phase_counts.get('mid', 0)}`",
-            f"- Late (`2/3 <= phi <= 1`): `{phase_counts.get('late', 0)}`",
-            f"- Post-event (`phi > 1`): `{phase_counts.get('post_event', 0)}`",
-            "",
-            "## Overlap And Baseline",
-            f"- Analysis interval: `{baseline['time_start']}` to `{baseline['time_end']}` ({baseline['total_common_bins']} bins)",
-            f"- BBF occupancy: `{baseline['bbf_true_bins']}/{baseline['total_common_bins']}` (`{baseline['bbf_fraction']:.4f}`)",
-            f"- Whistler occupancy: `{baseline['whistler_true_bins']}/{baseline['total_common_bins']}` (`{baseline['whistler_fraction']:.4f}`)",
-            f"- Actual overlap bins: `{baseline['actual_overlap_bins']}`",
-            f"- Expected random overlap: `{baseline['expected_random_overlap_bins']:.3f}`",
-            f"- Monte Carlo expected overlap: `{baseline['expected_mc_overlap_bins']:.3f}`" if not np.isnan(baseline["expected_mc_overlap_bins"]) else "- Monte Carlo expected overlap: `NaN`",
-            f"- Permutation p-value: `{baseline['permutation_p_value']:.4f}`" if not np.isnan(baseline["permutation_p_value"]) else "- Permutation p-value: `NaN`",
-            f"- Overlap enrichment: `{baseline['overlap_enrichment']:.3f}x` / `{baseline['overlap_enrichment_mc']:.3f}x` (Monte Carlo)"
-            if not np.isnan(baseline["overlap_enrichment"]) and not np.isnan(baseline["overlap_enrichment_mc"])
-            else "- Overlap enrichment: `NaN`",
-            "",
-            "## Conditional Probability",
-        ]
-    )
 
+def build_overlap_section(baseline: dict) -> list[str]:
+    lines = [
+        "## Overlap And Baseline",
+        f"- Analysis interval: `{baseline['time_start']}` to `{baseline['time_end']}` ({baseline['total_common_bins']} bins)",
+        f"- BBF occupancy: `{baseline['bbf_true_bins']}/{baseline['total_common_bins']}` (`{baseline['bbf_fraction']:.4f}`)",
+        f"- Whistler occupancy: `{baseline['whistler_true_bins']}/{baseline['total_common_bins']}` (`{baseline['whistler_fraction']:.4f}`)",
+        f"- Actual overlap bins: `{baseline['actual_overlap_bins']}`",
+        f"- Expected random overlap: `{baseline['expected_random_overlap_bins']:.3f}`",
+        f"- Monte Carlo expected overlap: `{baseline['expected_mc_overlap_bins']:.3f}`" if not np.isnan(baseline["expected_mc_overlap_bins"]) else "- Monte Carlo expected overlap: `NaN`",
+        f"- Permutation p-value: `{baseline['permutation_p_value']:.4f}`" if not np.isnan(baseline["permutation_p_value"]) else "- Permutation p-value: `NaN`",
+        f"- Overlap enrichment: `{baseline['overlap_enrichment']:.3f}x` / `{baseline['overlap_enrichment_mc']:.3f}x` (Monte Carlo)"
+        if not np.isnan(baseline["overlap_enrichment"]) and not np.isnan(baseline["overlap_enrichment_mc"])
+        else "- Overlap enrichment: `NaN`",
+        "",
+        "## Conditional Probability",
+    ]
     for row in baseline["conditional"]:
         if np.isnan(row["observed_probability"]) or np.isnan(row["expected_probability"]):
             lines.append(f"- Within {int(row['window_s'])} s: `NaN`")
@@ -704,16 +728,16 @@ def main() -> None:
             lines.append(
                 f"- Within {int(row['window_s'])} s: observed `{row['observed_probability']:.3f}` vs baseline `{row['expected_probability']:.3f}` -> `{row['enrichment']:.3f}x`"
             )
+    lines.append("")
+    return lines
 
-    lines.extend(
-        [
-            "",
-            "## BBF To Nearest Whistler",
-            "| BBF Event | Start | End | Direction | Peak Vx | Max |dBz| | Nearest Whistler Onset | Start Lag [s] | Front Lag [s] | Vx Peak Lag [s] | |dBz| Peak Lag [s] | Phi | Phase | Class | Front Class | Overlap |",
-            "|---|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---|---|---|---|",
-        ]
-    )
 
+def build_bbf_to_whistler_table_section(coupling: pd.DataFrame) -> list[str]:
+    lines = [
+        "## BBF To Nearest Whistler",
+        "| BBF Event | Start | End | Direction | Peak Vx | Max |dBz| | Nearest Whistler Onset | Start Lag [s] | Front Lag [s] | Vx Peak Lag [s] | |dBz| Peak Lag [s] | Phi | Phase | Class | Front Class | Overlap |",
+        "|---|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---|---|---|---|",
+    ]
     for _, row in coupling.iterrows():
         lines.append(
             f"| {int(row['bbf_event_id'])} | {row['start_time']} | {row['end_time']} | {str(row['direction']).replace('_candidate','')} | "
@@ -721,26 +745,55 @@ def main() -> None:
             f"{row['lag_onset_seconds']:.2f} | {row['lag_to_front_seconds']:.2f} | {row['lag_to_vx_peak_seconds']:.2f} | {row['lag_to_bz_peak_seconds']:.2f} | "
             f"{row['normalized_event_phase']:.3f} | {row['phase_region']} | {row['lag_class']} | {row['front_lag_class']} | {bool(row['overlap'])} |"
         )
+    lines.append("")
+    return lines
 
-    lines.extend(
-        [
-            "",
-            "## Threshold Sweep",
-            f"- Background-excess sweep CSV: `{THRESHOLD_SWEEP_CSV}`",
-            "",
-            "## Model-Ready Features",
-            "- Continuous predictors are kept as raw/continuous features: `whistler_ratio`, `background_excess`, `whistler_power_z`, `whistler_ratio_z`, `background_excess_z`, and `whistler_activity_score`.",
-            "- Strict labels are attached separately using the Santolik-style rule: `strict_whistler_segment_label` and `strict_whistler_event_label`.",
-            "",
-            f"BBF events CSV: `{BBF_EVENTS_CSV}`",
-            f"Whistler events CSV: `{WHISTLER_EVENTS_CSV}`",
-            f"Coupling CSV: `{COUPLING_CSV}`",
-            f"Model features CSV: `{MODEL_FEATURES_CSV}`",
-        ]
-    )
 
-    with open(REPORT_PATH, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
+def build_output_section() -> list[str]:
+    return [
+        "## Threshold Sweep",
+        f"- Background-excess sweep CSV: `{THRESHOLD_SWEEP_CSV}`",
+        "",
+        "## Model-Ready Features",
+        "- Continuous predictors are kept as raw/continuous features: `whistler_ratio`, `background_excess`, `whistler_power_z`, `whistler_ratio_z`, `background_excess_z`, and `whistler_activity_score`.",
+        "- Strict labels are attached separately using the Santolik-style rule: `strict_whistler_segment_label` and `strict_whistler_event_label`.",
+        "",
+        f"BBF events CSV: `{BBF_EVENTS_CSV}`",
+        f"Whistler events CSV: `{WHISTLER_EVENTS_CSV}`",
+        f"Coupling CSV: `{COUPLING_CSV}`",
+        f"Model features CSV: `{MODEL_FEATURES_CSV}`",
+    ]
+
+
+def main() -> None:
+    raw_bbf = build_bbf_table()
+    bbf_events, bbf = build_bbf_events(raw_bbf)
+    raw_wh = build_whistler_table()
+    model_features = build_model_feature_table(raw_wh, bbf)
+    whistler_events, wh, wh_thresholds = build_whistler_events(raw_wh)
+    sweep_rows = []
+    for floor in [2.0, 2.5, 3.0, 3.5, 4.0]:
+        sweep_rows.append(summarize_sweep_point(raw_wh, bbf_events, bbf, min_background_excess=floor))
+    pd.DataFrame(sweep_rows).to_csv(THRESHOLD_SWEEP_CSV, index=False)
+    lines = build_rules_section(wh_thresholds) + build_event_counts_section(bbf_events, whistler_events, model_features, raw_bbf)
+
+    if bbf_events.empty:
+        write_empty_coupling_csv()
+        write_no_bbf_report(lines)
+        print(f"report: {REPORT_PATH}")
+        print(f"bbf events: {BBF_EVENTS_CSV}")
+        print(f"whistler events: {WHISTLER_EVENTS_CSV}")
+        print(f"coupling: {COUPLING_CSV}")
+        return
+
+    coupling = nearest_whistler_lag(bbf_events, whistler_events)
+    baseline = compute_baseline(bbf, wh, whistler_events)
+    lines.extend(build_lag_statistics_section(coupling))
+    lines.extend(build_phase_section(coupling))
+    lines.extend(build_overlap_section(baseline))
+    lines.extend(build_bbf_to_whistler_table_section(coupling))
+    lines.extend(build_output_section())
+    write_report(lines)
 
     print(f"report: {REPORT_PATH}")
     print(f"bbf events: {BBF_EVENTS_CSV}")
