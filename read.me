@@ -1,0 +1,219 @@
+# Magnetic Progress Report
+
+As of: 2026-04-22
+
+This file is a high-level progress report for the current repository state. The existing `README.md` explains the project and reproduction flow; this document focuses on what has been completed, what is currently in progress, and what should happen next.
+
+## 1. Completed Workstreams
+
+### A. MMS single-case analysis pipeline
+
+Primary case:
+- `cases/2017-07-29_mms1_earthward_bbf`
+
+Core scripts:
+- `analyze_whistler_burst.py`
+- `analyze_whistler_baseline.py`
+- `analyze_event_coupling.py`
+- `build_ml_dataset.py`
+- `build_early_bbf_dataset.py`
+- `evaluate_early_bbf_pilot.py`
+
+Status:
+- The repository already contains an end-to-end MMS1 earthward BBF case pipeline:
+  BBF extraction, whistler candidate detection, event coupling analysis, and model-ready dataset export.
+- Both tabular and sequence-style datasets have been built for the case.
+- A causal early-BBF dataset also exists for pilot prediction experiments.
+
+Key outputs:
+- `cases/2017-07-29_mms1_earthward_bbf/event_coupling_summary.md`
+- `cases/2017-07-29_mms1_earthward_bbf/whistler_events.csv`
+- `cases/2017-07-29_mms1_earthward_bbf/bbf_events.csv`
+- `cases/2017-07-29_mms1_earthward_bbf/ml_dataset/`
+- `cases/2017-07-29_mms1_earthward_bbf/early_bbf_dataset/`
+
+Case-level findings already available:
+- Earthward BBF events: `4`
+- Whistler events: `32`
+- Within `60 s`: observed conditional probability `1.000`, baseline `0.437`, enrichment `2.286x`
+- Permutation p-value: `0.0005`
+
+Interpretation:
+- For the current MMS case, the BBF-whistler coupling signal is already quantified and is stronger than a random-overlap explanation.
+
+### B. MMS early-BBF pilot
+
+Relevant directory:
+- `cases/2017-07-29_mms1_earthward_bbf/early_bbf_dataset`
+
+Relevant reports:
+- `reports/evaluation_summary_clean.json`
+- `reports/baseline_results_clean.csv`
+
+Status:
+- A causal early-warning dataset has been created using only pre-anchor information.
+- A pilot baseline evaluation has also been run.
+
+Current limitation:
+- Clean evaluation sample count is still very small.
+- `drop_inside_bbf=true` summary shows only `11` samples with `6` positives.
+
+Interpretation:
+- This stage is useful as a structural proof of concept, not as a strong generalization claim.
+
+### C. MMS yearly expansion preparation
+
+Relevant scripts:
+- `mms_sdc_manifest.py`
+- `download_mms_day.py`
+- `build_yearly_ml_dataset.py`
+- `build_yearly_bbf_candidates.py`
+
+Relevant outputs:
+- `manifests/mms1_2017-01-01_to_2018-01-01_manifest.csv`
+- `manifests/mms1_2017-01-01_to_2018-01-01_summary.json`
+- `datasets/yearly_2017_mms1/`
+
+Status:
+- A 2017 MMS1 yearly manifest already exists.
+- Daily download automation based on the manifest has been added through `download_mms_day.py`.
+- A yearly merged dataset directory also exists.
+
+Current numbers:
+- `yearly_ml_dataset_summary.json` reports `3338` tabular rows and `14` sequences.
+
+Interpretation:
+- The yearly MMS structure is in place, but the repository is not yet at a mature multi-case yearly training stage.
+- It is still closer to "pipeline ready" than "large-scale dataset complete".
+
+### D. THEMIS-A early-BBF expansion
+
+New scripts:
+- `build_themis_early_dataset.py`
+- `scan_themis_bbf_candidates.py`
+- `evaluate_themis_baseline.py`
+
+New outputs:
+- `datasets/tha_2017-01-01_60d_vperp_200_20_filled/`
+- `datasets/tha_bbf_scan_2017-01-01_60d_vperp_200_20_filled/`
+
+Status:
+- The repo now includes a lightweight THEMIS-A early-prediction dataset builder that pulls FGM, FBK, MOM, and orbit data from CDAWeb.
+- The data is binned at `5 s`.
+- The BBF proxy label is defined as `V_perp > 200 km/s` for at least `20 s`.
+- Tail-region filtering and a `future_bbf_5m` target are already part of the dataset.
+- Threshold scan outputs were also generated to inspect label density and usable overlap.
+
+Current numbers from `summary.json`:
+- Processed days: `60`
+- Rows: `547878`
+- Positive timestep labels: `504`
+- Positive future windows: `4701`
+
+Data policy:
+- Raw CDF files are intentionally not stored; data is fetched in memory and reduced to feature outputs.
+
+### E. THEMIS baseline evaluation
+
+Relevant outputs:
+- `datasets/tha_2017-01-01_60d_vperp_200_20_filled/baseline/baseline_summary.json`
+- `datasets/tha_2017-01-01_60d_vperp_200_20_filled/baseline/baseline_metrics.csv`
+
+Current dataset split:
+- Clean anchors: `45616`
+- Train: `32178`
+- Val: `6950`
+- Test: `6488`
+- Test positives: `76`
+
+Best current baseline slice:
+- `logistic_regression + fgm_fbk`
+
+Test metrics:
+- Precision: `0.0982`
+- Recall: `0.4211`
+- F1: `0.1592`
+- Balanced accuracy: `0.6876`
+- PR-AUC: `0.0969`
+- ROC-AUC: `0.8671`
+
+Interpretation:
+- Precision and F1 are still low because the class is sparse.
+- ROC-AUC and balanced accuracy indicate the problem is not hopeless; there is usable separation even in a simple baseline setup.
+- The project has moved beyond a pure idea stage into a dataset-and-baseline validation stage.
+
+## 2. Practical Overall Status
+
+The work has progressed in this order:
+
+1. Complete a single MMS case pipeline for BBF-whistler coupling analysis.
+2. Convert that case into model-ready ML and early-warning datasets.
+3. Prepare the yearly MMS manifest and download/merge utilities.
+4. Expand into a longer THEMIS-A pilot to reduce the sample-scarcity problem.
+5. Run baseline prediction experiments on the larger THEMIS-derived dataset.
+
+In practical terms, the project already has:
+- data acquisition automation
+- event-label logic
+- feature generation
+- baseline evaluation
+
+The main missing pieces are:
+- stronger multi-case generalization
+- more robust event-definition calibration
+- threshold tuning
+- stronger validation design and model refinement
+
+## 3. Current Uncommitted Worktree Signals
+
+`git status --short` currently shows:
+
+- Modified:
+  - `README.md`
+
+- New scripts:
+  - `build_themis_early_dataset.py`
+  - `download_mms_day.py`
+  - `evaluate_themis_baseline.py`
+  - `scan_themis_bbf_candidates.py`
+
+- New generated datasets:
+  - `datasets/tha_2017-01-01_60d_vperp_200_20_filled/`
+  - `datasets/tha_bbf_scan_2017-01-01_60d_vperp_200_20_filled/`
+
+This means the latest concrete progress in the repo is concentrated in:
+- THEMIS pilot dataset generation
+- THEMIS baseline evaluation
+- MMS one-day download automation
+
+## 4. What Is Actually Successful Right Now
+
+Already successful:
+- The MMS single-case science workflow is functional and produces quantitative coupling summaries.
+- The repo can transform the scientific workflow into prediction datasets.
+- The THEMIS pilot provides enough anchors to move beyond a tiny case-only setting.
+
+Not yet mature:
+- Positive labels are still rare.
+- Current baselines are research sanity checks, not production-grade models.
+- The yearly MMS path is prepared but not yet populated at scale.
+- THEMIS labels are still operational proxies rather than final truth labels.
+
+## 5. Recommended Next Priorities
+
+Priority 1:
+- Revisit thresholding and anchor sampling in the THEMIS baseline pipeline.
+- Precision is still weak, so the decision threshold, class weighting, and positive-window definition need calibration.
+
+Priority 2:
+- Use `scan_themis_bbf_candidates.py` outputs to choose the best `V_perp` and duration rule that balances usable coverage against positive density.
+
+Priority 3:
+- Use `download_mms_day.py` to add more strong MMS days and accumulate more case-level feature datasets into the yearly path.
+
+Priority 4:
+- Explicitly separate "phenomenon detection" from "early warning" in the evaluation framework, especially because MMS and THEMIS labels are not identical in meaning.
+
+## 6. One-line Summary
+
+The project has already passed the single-case MMS analysis stage and is now in the dataset-expansion and baseline-validation stage, with the most recent real progress centered on the 60-day THEMIS early-BBF pilot and its first baseline evaluation.

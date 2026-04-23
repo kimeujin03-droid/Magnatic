@@ -1,182 +1,157 @@
 # MMS BBF-Whistler Coupling Analysis
 
-MMS1 관측 자료에서 earthward bursty bulk flow(BBF)와 whistler-mode wave 후보의 시간적 결합을 분석한 작업 저장소입니다. 핵심 케이스는 `2017-07-29 15:00:00-17:00:00 UTC` 구간이며, BBF 검출, SCM burst 기반 whistler 후보 추출, Santolik-style baseline 검증, BBF-whistler lag/overlap 통계를 함께 산출합니다.
+MMS1 관측 자료에서 earthward bursty bulk flow(BBF)와 whistler-mode wave 후보의 시간적 결합을 분석하는 작업 저장소입니다. 현재 로컬 분석은 `2017-07-29` MMS1 burst 자료를 중심으로 두 단계로 정리되어 있습니다.
 
-## 핵심 결과
+- 초기 집중 케이스: `cases/2017-07-29_mms1_earthward_bbf`, `2017-07-29 15:00:00-17:00:00 UTC`.
+- 확장 하루 케이스: `cases/2017-07-29_mms1_full_day`, 설정상 `2017-07-29T00:00:00Z`부터 `2017-07-29T23:59:59Z`.
 
-- 분석 케이스: MMS1 `2017-07-29` earthward BBF interval.
-- BBF 정의: `Vx > +300 km/s`, `5 s` bin에서 최소 `2`개 연속 bin.
-- event-level 자기장 support: speed-defined BBF event 내부에서 `max |delta Bz| > 3 nT`.
-- 검출된 earthward BBF event: `4`.
-- 검출된 whistler event: `32`.
-- model-ready whistler feature row: `4264`.
-- Santolik-style strict segment label: `247`.
-- Santolik-style strict event label: `454`.
-- BBF-whistler overlap enrichment: `2.925x` observed / `2.913x` Monte Carlo.
-- permutation p-value: `0.0005`.
-- BBF 시작 기준 whistler onset class: coincident `1`, lagging `3`, leading `0`, uncorrelated `0`.
+주의: MMS burst 자료는 하루 전체를 연속으로 덮지 않습니다. Full-day 케이스는 해당 날짜 manifest에 있는 burst interval 41개를 모두 합친 케이스이며, 실제 공통 분석 구간은 `2017-07-29 02:25:23.231949915`부터 `2017-07-29 20:35:10.721812125`까지입니다.
 
-## 이벤트 결합 요약
+## 현재 핵심 결과
 
-| BBF Event | Start | End | Peak Vx [km/s] | Max \|dBz\| [nT] | Nearest Whistler Onset | Start Lag [s] | Phase | Class | Overlap |
-|---:|---|---|---:|---:|---|---:|---|---|---|
-| 1 | 2017-07-29 15:47:35 | 2017-07-29 15:48:55 | 858.7 | 5.30 | 2017-07-29 15:48:23.431918054 | 48.43 | mid | lagging | true |
-| 2 | 2017-07-29 15:49:10 | 2017-07-29 15:53:20 | 868.0 | 3.80 | 2017-07-29 15:49:11.682186843 | 1.68 | early | coincident | true |
-| 3 | 2017-07-29 15:55:25 | 2017-07-29 16:03:50 | 997.7 | 5.82 | 2017-07-29 15:55:53.561574316 | 28.56 | early | lagging | true |
-| 4 | 2017-07-29 16:03:55 | 2017-07-29 16:08:30 | 975.6 | 3.49 | 2017-07-29 16:04:45.287603457 | 50.29 | early | lagging | true |
+Full-day 케이스 기준:
 
-Conditional probability는 모든 window에서 random baseline보다 높았습니다.
+- 다운로드 완료 raw CDF: `124/124` 파일, 약 `1.023 GiB`.
+- Products: `fgm_srvy`, `fgm_brst`, `fpi_brst_dis_moms`, `scm_brst_schb`.
+- SCM burst files analyzed: `41`.
+- Whistler feature/model rows: `22087`.
+- Detected whistler events: `135`.
+- Santolik-style evaluated segments: `19491`.
+- Santolik-style passing segments: `1254`.
+- Santolik-style baseline events: `230`.
+- Earthward BBF events: `8`.
+- BBF-whistler lag class: leading `1`, coincident `2`, lagging `5`, uncorrelated `0`.
+- BBF-whistler overlap enrichment: `9.993x` observed / `9.562x` Monte Carlo.
+- Permutation p-value: `0.0005`.
+- Within 60 s conditional probability: observed `0.875` vs baseline `0.141`, enrichment `6.193x`.
 
-| Window | Observed | Baseline | Enrichment |
-|---:|---:|---:|---:|
-| 10 s | 0.250 | 0.091 | 2.734x |
-| 30 s | 0.500 | 0.250 | 2.000x |
-| 60 s | 1.000 | 0.437 | 2.286x |
+## Full-Day BBF Events
 
-## Whistler 분석
+| Event | Start | End | Duration [s] | Peak Vx [km/s] | Max \|dBz\| [nT] |
+|---:|---|---|---:|---:|---:|
+| 1 | 2017-07-29 08:17:30 | 2017-07-29 08:19:25 | 115 | 669.5 | 3.28 |
+| 2 | 2017-07-29 08:20:50 | 2017-07-29 08:24:00 | 190 | 756.2 | 7.00 |
+| 3 | 2017-07-29 09:24:55 | 2017-07-29 09:27:05 | 130 | 802.0 | 3.96 |
+| 4 | 2017-07-29 10:24:55 | 2017-07-29 10:25:10 | 15 | 419.3 | 5.15 |
+| 5 | 2017-07-29 15:47:35 | 2017-07-29 15:48:55 | 80 | 858.7 | 5.30 |
+| 6 | 2017-07-29 15:49:10 | 2017-07-29 15:53:20 | 250 | 868.0 | 3.80 |
+| 7 | 2017-07-29 15:55:25 | 2017-07-29 16:03:50 | 505 | 997.7 | 5.82 |
+| 8 | 2017-07-29 16:03:55 | 2017-07-29 16:08:30 | 275 | 975.6 | 3.49 |
 
-SCM burst waveform의 sample rate는 약 `16383.77 Hz`로, 이 케이스에서는 whistler band를 직접 분석할 수 있습니다. Operational whistler band는 FGM의 `Bt`에서 계산한 local electron cyclotron frequency를 기준으로 동적으로 정의했습니다.
+## Early BBF Model Pilot
 
-- Dynamic whistler band: `0.1-0.5 fce`.
-- `fce ~= 28 * Bt[nT]`.
-- Whistler seed rule: `whistler_score >= q75`, `fce >= 50 Hz`, `background_excess >= max(q75, 3.0)`.
-- Event filter: duration `>= 0.25 s`, band occupancy `>= 0.60`, peak-frequency CV `<= 0.35`, merge gap `<= 1.0 s`.
-- 가장 강한 whistler segment: `2017-07-29 15:59:04.471211044`.
+Full-day 케이스에서 early BBF prediction용 causal dataset을 만들고 Leave-One-Out CV baseline 모델을 돌렸습니다. 목표는 anchor time `t` 이후 `300 s` 안에 BBF start가 있는지 예측하는 것입니다. 입력 window는 `t-900 s`부터 `t`까지이며, `Vx`와 BBF label 계열은 입력에서 제외했습니다.
 
-Santolik-style baseline은 다음 기준으로 별도 strict label을 만들었습니다.
+전체 anchor 평가:
 
-- Frequency gate: `0.1 fce` to `0.5 fce`.
-- Ellipticity `> 0.7`.
-- Planarity `> 0.7`.
-- PSD `> 1e-07 nT^2/Hz`.
-- Evaluated segments: `3758`.
-- Passing baseline segments: `224`.
-- Baseline events: `40`.
-- Current detector events: `26`.
+| Model | Samples | Positive | Accuracy | Balanced Acc | F1 | ROC-AUC |
+|---|---:|---:|---:|---:|---:|---:|
+| majority | 222 | 15 | 0.932 | 0.500 | 0.000 | 0.500 |
+| logistic_regression | 222 | 15 | 0.874 | 0.809 | 0.440 | 0.840 |
+| random_forest | 222 | 15 | 0.914 | 0.738 | 0.457 | 0.932 |
+| xgboost | 222 | 15 | 0.919 | 0.493 | 0.000 | 0.941 |
+
+BBF 내부 anchor 제거 평가:
+
+| Model | Samples | Positive | Accuracy | Balanced Acc | F1 | ROC-AUC |
+|---|---:|---:|---:|---:|---:|---:|
+| majority | 216 | 12 | 0.944 | 0.500 | 0.000 | 0.500 |
+| logistic_regression | 216 | 12 | 0.833 | 0.833 | 0.357 | 0.845 |
+| random_forest | 216 | 12 | 0.935 | 0.770 | 0.500 | 0.878 |
+| xgboost | 216 | 12 | 0.940 | 0.498 | 0.000 | 0.886 |
+
+해석상 아직 pilot 수준입니다. Positive sample이 `12-15`개뿐이므로, 이 결과는 모델 선택의 근거라기보다 데이터 파이프라인과 feature leakage 점검용 baseline으로 봐야 합니다.
 
 ## 저장소 구조
 
 ```text
 .
-├── analyze_mms.py
 ├── analyze_whistler_burst.py
 ├── analyze_whistler_baseline.py
 ├── analyze_event_coupling.py
 ├── build_ml_dataset.py
+├── build_early_bbf_dataset.py
+├── evaluate_early_bbf_pilot.py
 ├── build_yearly_ml_dataset.py
 ├── build_yearly_bbf_candidates.py
+├── download_mms_day.py
 ├── mms_sdc_manifest.py
-├── analysis_summary.md
 ├── manifests/
 │   ├── mms1_2017-01-01_to_2018-01-01_manifest.csv
 │   └── mms1_2017-01-01_to_2018-01-01_summary.json
 ├── datasets/
 │   └── yearly_2017_mms1/
-│       ├── tabular_features.parquet
-│       ├── sequence_index.csv
-│       ├── bbf_speed_candidates_2017.csv
-│       ├── yearly_ml_dataset_summary.json
-│       └── sequences/
 └── cases/
-    └── 2017-07-29_mms1_earthward_bbf/
-        ├── README.md
-        ├── case_config.json
-        ├── whistler_burst_summary.md
-        ├── event_coupling_summary.md
-        ├── bbf_events.csv
-        ├── whistler_events.csv
-        ├── event_coupling.csv
-        ├── whistler_model_features.csv
-        ├── threshold_sweep.csv
-        ├── whistler_burst_overview.png
-        ├── ml_dataset/
-        │   ├── tabular_features.parquet
-        │   ├── sequence_index.csv
-        │   ├── feature_schema.json
-        │   └── sequences/
-        └── baseline_santolik/
-            ├── baseline_summary.md
-            ├── baseline_segments.csv
-            ├── baseline_events.csv
-            └── baseline_overview.png
+    ├── 2017-07-29_mms1_earthward_bbf/
+    └── 2017-07-29_mms1_full_day/
 ```
 
-Raw MMS CDF 자료는 용량과 재현성 관리를 위해 Git 추적 대상에서 제외되어 있습니다. 케이스별 원자료는 보통 `cases/<case>/data/` 아래에 둡니다.
+Raw MMS CDF 자료는 용량과 재현성 관리를 위해 Git 추적 대상에서 제외합니다. 케이스별 원자료는 `cases/<case>/data/` 아래에 둡니다.
 
-## 실행 방법
+## 주요 산출물
 
-Python 의존성은 `cdflib`, `numpy`, `pandas`, `matplotlib`가 필요합니다.
+Full-day 케이스:
+
+- Case README: `cases/2017-07-29_mms1_full_day/README.md`
+- Download summary: `cases/2017-07-29_mms1_full_day/download_summary.json`
+- BBF events: `cases/2017-07-29_mms1_full_day/bbf_events.csv`
+- Whistler events: `cases/2017-07-29_mms1_full_day/whistler_events.csv`
+- Coupling summary: `cases/2017-07-29_mms1_full_day/event_coupling_summary.md`
+- Coupling table: `cases/2017-07-29_mms1_full_day/event_coupling.csv`
+- Model-ready feature table: `cases/2017-07-29_mms1_full_day/whistler_model_features.csv`
+- ML tabular dataset: `cases/2017-07-29_mms1_full_day/ml_dataset/tabular_features.parquet`
+- ML sequence index: `cases/2017-07-29_mms1_full_day/ml_dataset/sequence_index.csv`
+- Early BBF dataset: `cases/2017-07-29_mms1_full_day/early_bbf_dataset/`
+- Early BBF model results: `cases/2017-07-29_mms1_full_day/early_bbf_dataset/reports/baseline_results_clean.csv`
+
+Original 2-hour 케이스:
+
+- Case README: `cases/2017-07-29_mms1_earthward_bbf/README.md`
+- Coupling summary: `cases/2017-07-29_mms1_earthward_bbf/event_coupling_summary.md`
+- ML dataset: `cases/2017-07-29_mms1_earthward_bbf/ml_dataset/`
+
+Year-range pilot:
+
+- Year manifest: `manifests/mms1_2017-01-01_to_2018-01-01_manifest.csv`
+- Year manifest summary: `manifests/mms1_2017-01-01_to_2018-01-01_summary.json`
+- FPI-fast BBF speed candidates: `datasets/yearly_2017_mms1/bbf_speed_candidates_2017.csv`
+
+## Reproduce Full-Day Case
 
 ```powershell
 .\venv\Scripts\Activate.ps1
-$env:MMS_CASE_DIR = "C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf"
+
+python download_mms_day.py `
+  --date 2017-07-29 `
+  --case-id 2017-07-29_mms1_full_day `
+  --max-download-gib 2.0
+
+$env:MMS_CASE_DIR = "C:\Magnetic\cases\2017-07-29_mms1_full_day"
 python analyze_whistler_burst.py
 python analyze_whistler_baseline.py
 python analyze_event_coupling.py
 python build_ml_dataset.py
-python mms_sdc_manifest.py --start 2017-01-01 --stop 2018-01-01
-python build_yearly_bbf_candidates.py --resume
-python build_yearly_ml_dataset.py --start 2017-01-01 --stop 2018-01-01
+python build_early_bbf_dataset.py --case-dir C:\Magnetic\cases\2017-07-29_mms1_full_day --max-sequences 0
+python evaluate_early_bbf_pilot.py --dataset-dir C:\Magnetic\cases\2017-07-29_mms1_full_day\early_bbf_dataset
+python evaluate_early_bbf_pilot.py --dataset-dir C:\Magnetic\cases\2017-07-29_mms1_full_day\early_bbf_dataset --drop-inside-bbf
 ```
 
-스크립트는 `MMS_CASE_DIR` 환경 변수를 사용합니다. 지정하지 않으면 기본값은 `C:\Magnetic`입니다.
+## Year-Range Notes
 
-## ML 데이터셋
+`mms_sdc_manifest.py`로 만든 manifest는 `2017-01-01`부터 `2018-01-01`까지를 대상으로 합니다. Manifest 기준 2017년 full raw 크기는 대략 다음과 같습니다.
 
-`build_ml_dataset.py`는 기존 분석 산출물에서 Random Forest baseline용 tabular dataset과 LSTM용 fixed-window sequence dataset을 만듭니다. Raw CDF를 복사하지 않고 feature만 저장하므로 1년치 분석에서도 디스크 사용량을 줄일 수 있습니다.
+- FGM survey: `23.536 GiB`
+- FPI fast ion moments: `3.912 GiB`
+- FPI burst ion moments: `9.906 GiB`
+- FGM burst: `11.596 GiB`
+- SCM burst: `104.722 GiB`
 
-```powershell
-$env:MMS_CASE_DIR = "C:\Magnetic\cases\2017-07-29_mms1_earthward_bbf"
-python build_ml_dataset.py --resample-seconds 1 --pre-seconds 120 --post-seconds 300
-```
-
-현재 케이스의 생성 결과:
-
-- Tabular rows: `3338`.
-- LSTM sequences: `14`.
-- BBF event-anchor sequences: `4`.
-- Regular time-anchor sequences: `10`.
-- Sequence shape: `421 x 28`.
-- Tabular output: `cases/2017-07-29_mms1_earthward_bbf/ml_dataset/tabular_features.parquet`.
-- Sequence index: `cases/2017-07-29_mms1_earthward_bbf/ml_dataset/sequence_index.csv`.
-- Feature schema: `cases/2017-07-29_mms1_earthward_bbf/ml_dataset/feature_schema.json`.
-
-Parquet 저장을 원하면 `pyarrow`를 설치하면 됩니다. 설치되어 있지 않은 환경에서는 자동으로 CSV에 저장합니다.
-
-연간 데이터셋은 사용 가능한 case-level ML dataset을 병합해서 만듭니다.
-
-```powershell
-python build_yearly_ml_dataset.py --start 2017-01-01 --stop 2018-01-01
-```
-
-현재 로컬 원자료와 feature 산출물은 `2017-07-29` 케이스 1개뿐입니다. 따라서 `datasets/yearly_2017_mms1`는 2017년 범위로 생성되어 있지만, 실제 포함 데이터는 사용 가능한 `2017-07-29_mms1_earthward_bbf` 케이스입니다. 1년 전체를 채우려면 같은 형식의 case directory를 더 생성한 뒤 이 스크립트로 병합합니다.
-
-1년치 raw 데이터는 전부 저장하지 않습니다. `mms_sdc_manifest.py`로 MMS SDC manifest를 만든 뒤 `build_yearly_bbf_candidates.py --resume`가 FPI fast ion moments를 하루 단위로 다운로드하고, BBF speed candidate만 추출한 뒤 raw CDF를 삭제합니다. 현재 manifest 기준 2017년 full raw 크기는 FGM survey `23.536 GiB`, FPI fast ion moments `3.912 GiB`, FPI burst ion moments `9.906 GiB`, FGM burst `11.596 GiB`, SCM burst `104.722 GiB`입니다. 따라서 6GB 이하 환경에서는 FPI fast로 후보를 먼저 찾고, 후보 주변 burst 자료만 추가 다운로드하는 방식으로 진행합니다.
-
-Pilot 실행 결과 `2017-01-01`부터 `2017-01-07`까지 FPI fast 파일을 하루 단위로 내려받아 처리했고, speed candidate `181`개를 추출했습니다. 이 중 earthward BBF candidate는 `1`개, tailward fast-flow candidate는 `180`개였습니다.
-
-## 주요 산출물
-
-- BBF event table: `cases/2017-07-29_mms1_earthward_bbf/bbf_events.csv`
-- Whistler event table: `cases/2017-07-29_mms1_earthward_bbf/whistler_events.csv`
-- BBF-whistler coupling table: `cases/2017-07-29_mms1_earthward_bbf/event_coupling.csv`
-- Model-ready feature table: `cases/2017-07-29_mms1_earthward_bbf/whistler_model_features.csv`
-- Random Forest tabular dataset: `cases/2017-07-29_mms1_earthward_bbf/ml_dataset/tabular_features.parquet`
-- LSTM sequence index: `cases/2017-07-29_mms1_earthward_bbf/ml_dataset/sequence_index.csv`
-- Year-range tabular dataset: `datasets/yearly_2017_mms1/tabular_features.parquet`
-- Year-range sequence index: `datasets/yearly_2017_mms1/sequence_index.csv`
-- 2017 FPI-fast BBF speed candidates: `datasets/yearly_2017_mms1/bbf_speed_candidates_2017.csv`
-- Threshold sweep: `cases/2017-07-29_mms1_earthward_bbf/threshold_sweep.csv`
-- Whistler overview plot: `cases/2017-07-29_mms1_earthward_bbf/whistler_burst_overview.png`
-- Santolik baseline overview plot: `cases/2017-07-29_mms1_earthward_bbf/baseline_santolik/baseline_overview.png`
-
-## 초기 survey-rate 점검
-
-루트의 `analysis_summary.md`는 `2026-01-13` survey-rate 자료를 대상으로 한 초기 feasibility check입니다. 이 자료에서는 SCM survey sample rate가 약 `32 Hz`라 Nyquist가 약 `16 Hz`에 머물러 classic whistler band를 직접 볼 수 없었습니다. 따라서 현재 연구의 주 분석은 SCM burst 자료가 있는 `2017-07-29` 케이스로 분리했습니다.
+따라서 전체 SCM burst raw를 한 번에 저장하기보다, FPI fast로 후보를 먼저 찾고 후보 주변 burst 자료를 별도 케이스로 내려받는 방식이 현실적입니다. 현재 `build_yearly_bbf_candidates.py --resume` pilot은 `2017-01-01`부터 `2017-01-07`까지 처리했고 speed candidate `181`개를 추출했습니다.
 
 ## 해석상 주의점
 
 - `whistler_score`는 candidate-generation score이며 최종 label이 아닙니다.
 - `bbf_operational_flag`는 rule-based provisional event flag입니다.
-- Tailward fast flow는 별도 추적하되, 이 케이스의 earthward BBF set에서는 제외했습니다.
-- Strict Santolik-style label은 모델 학습/검증용 boolean target으로 붙였고, continuous predictor는 thresholding하지 않은 값으로 보존했습니다.
+- Santolik-style label은 모델 학습/검증용 strict boolean target으로 붙인 별도 기준입니다.
+- Full-day 케이스는 하루 전체 continuous coverage가 아니라 2017-07-29에 존재하는 MMS burst interval 묶음입니다.
+- 현재 모델 평가는 단일 날짜 pilot이므로 일반화 성능으로 해석하면 안 됩니다.
